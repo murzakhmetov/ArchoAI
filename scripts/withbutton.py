@@ -4,18 +4,26 @@ import requests
 import json
 import time
 import torch
+import os
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
 from util.inference_utils import create_model, inference
 from main import Parameters
 
-GEMINI_API_KEY = "AIzaSyD4csAoJpeQO5sOsIjujaeGyU44-hrOXnA"
-GEMINI_MODEL = "gemini-3.1-flash-lite"  # Используем стабильную версию для строгого следования JSON-схеме
+# Загрузка переменных окружения
+# Пытаемся найти .env в корне проекта, в папке archoai_app или в текущей директории
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', 'archoai_app', '.env'))
+load_dotenv() 
 
-PROJECT_REF = "wvhdhfddtusppjmsgmvn"
-SUPABASE_KEY = "sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln"
-BUCKET_NAME = "artifact-images"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+
+PROJECT_REF = os.getenv("SUPABASE_PROJECT_REF")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "artifact-images")
 
 SUPABASE_DB_URL = f"https://{PROJECT_REF}.supabase.co/rest/v1/artifacts"
 SUPABASE_STORAGE_URL = f"https://{PROJECT_REF}.supabase.co/storage/v1/object/{BUCKET_NAME}"
