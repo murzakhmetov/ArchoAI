@@ -1,0 +1,4572 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ArchoAI — Искусственный интеллект для археологии</title>
+    <meta name="description"
+        content="Инновационная система компьютерного зрения для автоматической классификации археологических находок на базе Raspberry Pi 5." />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            --accent-cyan: #00f0ff;
+            --accent-pink: #ff00aa;
+            --accent-purple: #9945ff;
+            --glow-color: rgba(102, 126, 234, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: "Outfit", sans-serif;
+            overflow-x: hidden;
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .dark {
+            background: linear-gradient(180deg, #0a0a0f 0%, #0d0d15 50%, #0a0a0f 100%);
+            color: #ffffff;
+        }
+
+        .light {
+            background: linear-gradient(180deg, #f8f9ff 0%, #ffffff 50%, #f0f2ff 100%);
+            color: #0a0a0f;
+        }
+
+        /* Animated background mesh */
+        .mesh-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.4;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 40%, rgba(102, 126, 234, 0.15), transparent),
+                radial-gradient(ellipse 60% 40% at 80% 60%, rgba(118, 75, 162, 0.15), transparent),
+                radial-gradient(ellipse 50% 30% at 50% 80%, rgba(240, 147, 251, 0.1), transparent);
+        }
+
+        .light .mesh-bg {
+            opacity: 0.6;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 40%, rgba(102, 126, 234, 0.1), transparent),
+                radial-gradient(ellipse 60% 40% at 80% 60%, rgba(118, 75, 162, 0.08), transparent),
+                radial-gradient(ellipse 50% 30% at 50% 80%, rgba(240, 147, 251, 0.06), transparent);
+        }
+
+        /* Floating particles canvas */
+        #particles-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Noise texture overlay */
+        .noise {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.02;
+            z-index: 2;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        /* Premium glassmorphism */
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(40px) saturate(150%);
+            -webkit-backdrop-filter: blur(40px) saturate(150%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 32px;
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+                0 20px 60px -20px rgba(0, 0, 0, 0.5);
+        }
+
+        .light .glass {
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.8) inset,
+                0 20px 60px -20px rgba(102, 126, 234, 0.2),
+                0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Glowing glass effect */
+        .glass-glow {
+            position: relative;
+        }
+
+        .glass-glow::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            background: var(--primary-gradient);
+            border-radius: 34px;
+            z-index: -1;
+            opacity: 0;
+            filter: blur(20px);
+            transition: opacity 0.5s ease;
+        }
+
+        .glass-glow:hover::before {
+            opacity: 0.5;
+        }
+
+        /* Animated gradient text */
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #667eea 75%, #764ba2 100%);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 4s ease-in-out infinite;
+        }
+
+        @keyframes gradientShift {
+
+            0%,
+            100% {
+                background-position: 0% center;
+            }
+
+            50% {
+                background-position: 100% center;
+            }
+        }
+
+        /* Glowing text effect */
+        .glow-text {
+            text-shadow:
+                0 0 20px rgba(102, 126, 234, 0.5),
+                0 0 40px rgba(118, 75, 162, 0.3),
+                0 0 60px rgba(240, 147, 251, 0.2);
+        }
+
+        .light .glow-text {
+            text-shadow: none;
+        }
+
+        /* Live pulse animation - enhanced */
+        .live-pulse {
+            position: relative;
+        }
+
+        .live-pulse::before,
+        .live-pulse::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: inherit;
+            animation: ripple 2s cubic-bezier(0, 0.5, 0.5, 1) infinite;
+        }
+
+        .live-pulse::after {
+            animation-delay: 0.5s;
+        }
+
+        @keyframes ripple {
+            0% {
+                transform: scale(1);
+                opacity: 0.6;
+            }
+
+            100% {
+                transform: scale(3);
+                opacity: 0;
+            }
+        }
+
+        /* Heartbeat animation for logo */
+        .heartbeat {
+            animation: heartbeat 1.5s ease-in-out infinite;
+        }
+
+        @keyframes heartbeat {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            14% {
+                transform: scale(1.1);
+            }
+
+            28% {
+                transform: scale(1);
+            }
+
+            42% {
+                transform: scale(1.1);
+            }
+
+            70% {
+                transform: scale(1);
+            }
+        }
+
+        /* Floating animation */
+        .floating {
+            animation: floating 6s ease-in-out infinite;
+        }
+
+        @keyframes floating {
+
+            0%,
+            100% {
+                transform: translateY(0) rotate(0deg);
+            }
+
+            25% {
+                transform: translateY(-20px) rotate(2deg);
+            }
+
+            50% {
+                transform: translateY(-10px) rotate(0deg);
+            }
+
+            75% {
+                transform: translateY(-25px) rotate(-2deg);
+            }
+        }
+
+        /* Bento grid */
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+
+        @media (min-width: 768px) {
+            .bento-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .bento-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        /* Bento item with enhanced hover */
+        .bento-item {
+            border-radius: 32px;
+            padding: 40px;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .bento-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg,
+                    transparent,
+                    rgba(255, 255, 255, 0.05),
+                    transparent);
+            transition: left 0.7s ease;
+        }
+
+        .bento-item:hover::before {
+            left: 100%;
+        }
+
+        .bento-item:hover {
+            transform: translateY(-12px) scale(1.02);
+            box-shadow:
+                0 30px 80px -20px rgba(102, 126, 234, 0.4),
+                0 0 0 1px rgba(102, 126, 234, 0.2);
+        }
+
+        /* Device shadow with glow */
+        .device-shadow {
+            filter: drop-shadow(0 50px 100px rgba(102, 126, 234, 0.4));
+            transition: filter 0.5s ease;
+        }
+
+        .device-shadow:hover {
+            filter: drop-shadow(0 60px 120px rgba(102, 126, 234, 0.6));
+        }
+
+        .light .device-shadow {
+            filter: drop-shadow(0 50px 100px rgba(102, 126, 234, 0.25));
+        }
+
+        /* Theme toggle button */
+        .theme-toggle {
+            position: fixed;
+            top: 100px;
+            right: 40px;
+            z-index: 100;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.15) rotate(15deg);
+            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Typography */
+        .stat-number {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: clamp(5rem, 15vw, 12rem);
+            font-weight: 700;
+            line-height: 0.85;
+            letter-spacing: -0.05em;
+        }
+
+        .hero-title {
+            font-size: clamp(3rem, 9vw, 8rem);
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -0.04em;
+        }
+
+        .section-title {
+            font-size: clamp(2.5rem, 7vw, 5.5rem);
+            font-weight: 700;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+        }
+
+        /* Button styles */
+        .btn-primary {
+            position: relative;
+            background: var(--primary-gradient);
+            background-size: 200% 200%;
+            color: white;
+            padding: 20px 48px;
+            border-radius: 100px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            overflow: hidden;
+            transition: all 0.4s ease;
+            animation: gradientShift 4s ease-in-out infinite;
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s ease, height 0.6s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow:
+                0 20px 60px -15px rgba(102, 126, 234, 0.6),
+                0 0 0 4px rgba(102, 126, 234, 0.2);
+        }
+
+        .btn-primary:hover::before {
+            width: 400px;
+            height: 400px;
+        }
+
+        /* Scroll indicator */
+        .scroll-indicator {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            opacity: 0.6;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            100% {
+                transform: translateX(-50%) translateY(0);
+            }
+
+            50% {
+                transform: translateX(-50%) translateY(10px);
+            }
+        }
+
+        .scroll-indicator .mouse {
+            width: 28px;
+            height: 44px;
+            border: 2px solid currentColor;
+            border-radius: 14px;
+            position: relative;
+        }
+
+        .scroll-indicator .wheel {
+            width: 4px;
+            height: 10px;
+            background: currentColor;
+            border-radius: 2px;
+            position: absolute;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: scroll-wheel 2s infinite;
+        }
+
+        @keyframes scroll-wheel {
+            0% {
+                opacity: 1;
+                top: 8px;
+            }
+
+            100% {
+                opacity: 0;
+                top: 24px;
+            }
+        }
+
+        /* Feature icons */
+        .feature-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: 20px;
+            background: var(--primary-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+            font-size: 28px;
+            box-shadow: 0 10px 30px -10px rgba(102, 126, 234, 0.5);
+        }
+
+        /* Price tag */
+        .price-highlight {
+            position: relative;
+            display: inline-block;
+        }
+
+        .price-highlight::after {
+            content: '';
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            right: 0;
+            height: 20px;
+            background: linear-gradient(90deg, rgba(102, 126, 234, 0.3), rgba(240, 147, 251, 0.3));
+            border-radius: 10px;
+            z-index: -1;
+        }
+
+        /* Animated border for cards */
+        .animated-border {
+            position: relative;
+        }
+
+        .animated-border::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            padding: 2px;
+            background: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #667eea);
+            background-size: 300% 300%;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            animation: borderRotate 4s linear infinite;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .animated-border:hover::after {
+            opacity: 1;
+        }
+
+        @keyframes borderRotate {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        /* Navigation */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 99;
+            padding: 20px 40px;
+            transition: all 0.4s ease;
+        }
+
+        .nav.scrolled {
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(20px);
+            padding: 16px 40px;
+        }
+
+        .light .nav.scrolled {
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Marker/dot indicator */
+        .section-marker {
+            width: 12px;
+            height: 12px;
+            background: var(--primary-gradient);
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 16px;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.6);
+        }
+
+        /* Text reveal animation */
+        .text-reveal {
+            overflow: hidden;
+        }
+
+        .text-reveal span {
+            display: inline-block;
+        }
+
+        /* Cursor glow effect */
+        .cursor-glow {
+            position: fixed;
+            width: 400px;
+            height: 400px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(102, 126, 234, 0.15) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 1;
+            transform: translate(-50%, -50%);
+            transition: opacity 0.3s ease;
+        }
+
+        .light .cursor-glow {
+            background: radial-gradient(circle, rgba(102, 126, 234, 0.08) 0%, transparent 70%);
+        }
+
+        /* Stats counter animation container */
+        .stats-container {
+            perspective: 1000px;
+        }
+
+        /* 3D card effect */
+        .card-3d {
+            transition: transform 0.5s ease;
+            transform-style: preserve-3d;
+        }
+
+        .card-3d:hover {
+            transform: rotateY(5deg) rotateX(5deg);
+        }
+
+        /* Line decoration */
+        .line-decoration {
+            width: 80px;
+            height: 4px;
+            background: var(--primary-gradient);
+            border-radius: 2px;
+            margin: 0 auto 32px;
+        }
+
+        /* Contact icons */
+        .contact-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(102, 126, 234, 0.1);
+            margin-bottom: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .contact-icon:hover {
+            background: var(--primary-gradient);
+            transform: scale(1.1);
+        }
+
+        /* Reveal animations */
+        .reveal {
+            opacity: 0;
+            transform: translateY(60px);
+        }
+
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Smooth scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #667eea, #764ba2);
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(180deg, #764ba2, #f093fb);
+        }
+
+        /* Auth Modal Styles */
+        .auth-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .auth-modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .auth-modal {
+            background: rgba(20, 20, 30, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 48px;
+            max-width: 440px;
+            width: 90%;
+            position: relative;
+            transform: translateY(20px) scale(0.95);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow:
+                0 0 0 1px rgba(102, 126, 234, 0.2),
+                0 25px 80px -20px rgba(102, 126, 234, 0.4),
+                0 0 60px -20px rgba(240, 147, 251, 0.3);
+        }
+
+        .light .auth-modal {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .auth-modal-overlay.active .auth-modal {
+            transform: translateY(0) scale(1);
+        }
+
+        .auth-modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            color: inherit;
+        }
+
+        .auth-modal-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: rotate(90deg);
+        }
+
+        .auth-input {
+            width: 100%;
+            padding: 16px 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: inherit;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        .auth-input:focus {
+            border-color: rgba(102, 126, 234, 0.5);
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .auth-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .light .auth-input {
+            background: rgba(0, 0, 0, 0.03);
+            border-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .light .auth-input:focus {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .light .auth-input::placeholder {
+            color: rgba(0, 0, 0, 0.4);
+        }
+
+        .auth-btn {
+            width: 100%;
+            padding: 16px 32px;
+            border-radius: 12px;
+            border: none;
+            background: var(--primary-gradient);
+            background-size: 200% 200%;
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            animation: gradientShift 4s ease-in-out infinite;
+        }
+
+        .auth-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px -10px rgba(102, 126, 234, 0.5);
+        }
+
+        .auth-btn:active {
+            transform: translateY(0);
+        }
+
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin: 24px 0;
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        .auth-divider::before,
+        .auth-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .light .auth-divider {
+            color: rgba(0, 0, 0, 0.3);
+        }
+
+        .light .auth-divider::before,
+        .light .auth-divider::after {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .auth-link {
+            color: #667eea;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .auth-link:hover {
+            color: #f093fb;
+            text-decoration: underline;
+        }
+
+        .nav-auth-btn {
+            padding: 10px 24px;
+            border-radius: 100px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+        }
+
+        .nav-login-btn {
+            background: transparent;
+            color: inherit;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-login-btn:hover {
+            border-color: rgba(102, 126, 234, 0.5);
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .light .nav-login-btn {
+            border-color: rgba(0, 0, 0, 0.2);
+        }
+
+        .light .nav-login-btn:hover {
+            border-color: rgba(102, 126, 234, 0.5);
+        }
+
+        .nav-signup-btn {
+            background: var(--primary-gradient);
+            background-size: 200% 200%;
+            color: white;
+            animation: gradientShift 4s ease-in-out infinite;
+        }
+
+        .nav-signup-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px -8px rgba(102, 126, 234, 0.5);
+        }
+
+        .user-menu {
+            position: relative;
+        }
+
+        .user-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--primary-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .user-avatar:hover {
+            transform: scale(1.05);
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .user-dropdown {
+            position: absolute;
+            top: calc(100% + 12px);
+            right: 0;
+            min-width: 220px;
+            background: rgba(20, 20, 30, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 12px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.5);
+        }
+
+        .light .user-dropdown {
+            background: rgba(255, 255, 255, 0.95);
+            border-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .user-menu:hover .user-dropdown,
+        .user-dropdown:hover {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .dropdown-item {
+            padding: 12px 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .dropdown-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 8px 0;
+        }
+
+        .light .dropdown-divider {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .auth-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .auth-error.show {
+            display: block;
+        }
+
+        .auth-success {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #22c55e;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .auth-success.show {
+            display: block;
+        }
+
+        /* Mobile Navigation Styles */
+        .mobile-menu-btn {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 101;
+        }
+
+        .mobile-menu-btn:hover {
+            background: rgba(102, 126, 234, 0.1);
+            border-color: rgba(102, 126, 234, 0.3);
+        }
+
+        .light .mobile-menu-btn {
+            background: rgba(0, 0, 0, 0.03);
+            border-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .hamburger-line {
+            width: 20px;
+            height: 2px;
+            background: currentColor;
+            border-radius: 2px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .hamburger-line:nth-child(1) {
+            margin-bottom: 5px;
+        }
+
+        .hamburger-line:nth-child(3) {
+            margin-top: 5px;
+        }
+
+        .mobile-menu-btn.active .hamburger-line:nth-child(1) {
+            transform: translateY(7px) rotate(45deg);
+        }
+
+        .mobile-menu-btn.active .hamburger-line:nth-child(2) {
+            opacity: 0;
+            transform: scaleX(0);
+        }
+
+        .mobile-menu-btn.active .hamburger-line:nth-child(3) {
+            transform: translateY(-7px) rotate(-45deg);
+        }
+
+        /* Mobile Menu Overlay */
+        .mobile-menu-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            z-index: 98;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .mobile-menu-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Mobile Menu Panel */
+        .mobile-menu {
+            position: fixed;
+            top: 0;
+            right: -100%;
+            width: 280px;
+            max-width: 85vw;
+            height: 100%;
+            background: rgba(15, 15, 25, 0.98);
+            backdrop-filter: blur(40px);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 100;
+            padding: 80px 24px 40px;
+            transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow-y: auto;
+            box-shadow: -20px 0 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .light .mobile-menu {
+            background: rgba(255, 255, 255, 0.98);
+            border-left: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: -20px 0 60px rgba(0, 0, 0, 0.1);
+        }
+
+        .mobile-menu.active {
+            right: 0;
+        }
+
+        .mobile-menu-links {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 32px;
+        }
+
+        .mobile-menu-link {
+            display: block;
+            padding: 16px 20px;
+            border-radius: 14px;
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: inherit;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            background: transparent;
+        }
+
+        .mobile-menu-link:hover {
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+            transform: translateX(8px);
+        }
+
+        .mobile-auth-section {
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .light .mobile-auth-section {
+            border-top-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .mobile-auth-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .mobile-auth-btn {
+            display: block;
+            width: 100%;
+            padding: 16px 24px;
+            border-radius: 14px;
+            font-weight: 600;
+            font-size: 1rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+        }
+
+        .mobile-login-btn {
+            background: transparent;
+            color: inherit;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .mobile-login-btn:hover {
+            border-color: rgba(102, 126, 234, 0.5);
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .light .mobile-login-btn {
+            border-color: rgba(0, 0, 0, 0.2);
+        }
+
+        .mobile-signup-btn {
+            background: var(--primary-gradient);
+            background-size: 200% 200%;
+            color: white;
+            animation: gradientShift 4s ease-in-out infinite;
+        }
+
+        .mobile-signup-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px -8px rgba(102, 126, 234, 0.5);
+        }
+
+        /* Mobile User Menu */
+        .mobile-user-section {
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .light .mobile-user-section {
+            border-top-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .mobile-user-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 14px;
+        }
+
+        .light .mobile-user-info {
+            background: rgba(0, 0, 0, 0.03);
+        }
+
+        .mobile-user-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--primary-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .mobile-user-details {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .mobile-user-name {
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .mobile-user-email {
+            font-size: 0.85rem;
+            opacity: 0.6;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mobile-menu-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .mobile-menu-action {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            background: transparent;
+            color: inherit;
+            font-size: 1rem;
+            font-family: inherit;
+            width: 100%;
+            text-align: left;
+        }
+
+        .mobile-menu-action:hover {
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .mobile-menu-action.logout {
+            color: #ef4444;
+            margin-top: 8px;
+        }
+
+        /* Responsive Breakpoints */
+        @media (max-width: 767px) {
+            .mobile-menu-btn {
+                display: flex;
+            }
+
+            .nav {
+                padding: 16px 20px;
+            }
+
+            .nav.scrolled {
+                padding: 12px 20px;
+            }
+
+            .theme-toggle {
+                top: auto;
+                bottom: 24px;
+                right: 24px;
+                width: 50px;
+                height: 50px;
+            }
+
+            /* Prevent body scroll when mobile menu is open */
+            body.mobile-menu-open {
+                overflow: hidden;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .mobile-menu {
+                width: 100%;
+                max-width: 100%;
+            }
+        }
+
+        /* ==========================================
+       HEALTH DASHBOARD STYLES - PREMIUM REDESIGN
+       ========================================== */
+
+        .dashboard-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 5, 15, 0.92);
+            backdrop-filter: blur(30px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .dashboard-overlay::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(circle at 20% 30%, rgba(102, 126, 234, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(240, 147, 251, 0.12) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.08) 0%, transparent 40%);
+            pointer-events: none;
+        }
+
+        .dashboard-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .dashboard-container {
+            background: linear-gradient(145deg, rgba(20, 20, 35, 0.95), rgba(12, 12, 22, 0.98));
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 40px;
+            width: 100%;
+            max-width: 1300px;
+            max-height: 92vh;
+            overflow-y: auto;
+            position: relative;
+            transform: translateY(40px) scale(0.92);
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow:
+                0 0 0 1px rgba(102, 126, 234, 0.15),
+                0 60px 120px -40px rgba(102, 126, 234, 0.35),
+                0 0 100px -40px rgba(240, 147, 251, 0.25),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .dashboard-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            background: linear-gradient(180deg, rgba(102, 126, 234, 0.08) 0%, transparent 100%);
+            border-radius: 40px 40px 0 0;
+            pointer-events: none;
+        }
+
+        .light .dashboard-container {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 255, 0.95));
+            border: 1px solid rgba(102, 126, 234, 0.15);
+            box-shadow:
+                0 0 0 1px rgba(102, 126, 234, 0.08),
+                0 60px 120px -40px rgba(102, 126, 234, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 1);
+        }
+
+        .dashboard-overlay.active .dashboard-container {
+            transform: translateY(0) scale(1);
+        }
+
+        .dashboard-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 28px 40px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            position: sticky;
+            top: 0;
+            background: linear-gradient(180deg, rgba(20, 20, 35, 0.98) 0%, rgba(20, 20, 35, 0.95) 100%);
+            backdrop-filter: blur(30px);
+            z-index: 10;
+            border-radius: 40px 40px 0 0;
+        }
+
+        .light .dashboard-header {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%);
+            border-bottom-color: rgba(102, 126, 234, 0.08);
+        }
+
+        .dashboard-header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .dashboard-logo {
+            width: 56px;
+            height: 56px;
+            filter: drop-shadow(0 4px 12px rgba(102, 126, 234, 0.4));
+        }
+
+        .dashboard-title {
+            font-size: 1.75rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.8) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .light .dashboard-title {
+            background: linear-gradient(135deg, #1a1a2e 0%, #667eea 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+
+        .dashboard-subtitle {
+            font-size: 0.95rem;
+            opacity: 0.5;
+            margin-top: 2px;
+        }
+
+        .dashboard-close {
+            width: 52px;
+            height: 52px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            color: inherit;
+        }
+
+        .dashboard-close:hover {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.3);
+            transform: rotate(90deg) scale(1.05);
+            box-shadow: 0 8px 24px -8px rgba(239, 68, 68, 0.3);
+        }
+
+        .dashboard-content {
+            padding: 36px 40px 48px;
+            position: relative;
+        }
+
+        /* Dashboard Grid */
+        .dashboard-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: stretch;
+        }
+
+        .dashboard-card {
+            background: linear-gradient(145deg, rgba(35, 35, 55, 0.85), rgba(25, 25, 45, 0.95));
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 28px;
+            padding: 32px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            box-shadow:
+                0 12px 40px rgba(0, 0, 0, 0.25),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .dashboard-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, transparent 50%);
+            pointer-events: none;
+            border-radius: 28px;
+        }
+
+        .light .dashboard-card {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 255, 0.95));
+            border-color: rgba(102, 126, 234, 0.12);
+            box-shadow:
+                0 12px 40px rgba(102, 126, 234, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 1);
+        }
+
+        .dashboard-card:hover {
+            border-color: rgba(102, 126, 234, 0.25);
+            transform: translateY(-6px);
+            box-shadow:
+                0 28px 60px -20px rgba(102, 126, 234, 0.35),
+                0 0 0 1px rgba(102, 126, 234, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .dashboard-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--primary-gradient);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            border-radius: 28px 28px 0 0;
+        }
+
+        .dashboard-card:hover::before {
+            opacity: 1;
+        }
+
+        /* Card Sizes */
+        .card-full {
+            grid-column: span 12;
+        }
+
+        .card-half {
+            flex: 1 1 calc(50% - 10px);
+            min-height: 340px;
+            max-width: calc(50% - 10px);
+        }
+
+        .card-third {
+            grid-column: span 4;
+        }
+
+        .card-quarter {
+            grid-column: span 3;
+        }
+
+        /* Heart Rate Card - Premium Redesign */
+        .heart-rate-card {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+            height: 100%;
+            min-height: 280px;
+            justify-content: center;
+        }
+
+        .heart-icon-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .heart-icon-bg {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(244, 114, 182, 0.25));
+            border-radius: 50%;
+            animation: heartPulse 1.5s ease-in-out infinite;
+            filter: blur(8px);
+        }
+
+        .heart-icon-container::before {
+            content: '';
+            position: absolute;
+            inset: -15px;
+            background: radial-gradient(circle, rgba(239, 68, 68, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: heartGlow 1.5s ease-in-out infinite;
+        }
+
+        @keyframes heartGlow {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 0.5;
+            }
+
+            50% {
+                transform: scale(1.2);
+                opacity: 0.8;
+            }
+        }
+
+        @keyframes heartPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.2);
+                opacity: 0.6;
+            }
+        }
+
+        .heart-icon {
+            font-size: 56px;
+            position: relative;
+            z-index: 1;
+            animation: heartbeat 1.5s ease-in-out infinite;
+            filter: drop-shadow(0 4px 12px rgba(239, 68, 68, 0.4));
+        }
+
+        .heart-rate-value {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 4.5rem;
+            font-weight: 700;
+            line-height: 1;
+            background: linear-gradient(135deg, #ff6b6b, #f472b6, #c084fc);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 3s ease-in-out infinite;
+            text-shadow: 0 0 60px rgba(239, 68, 68, 0.3);
+        }
+
+        .heart-rate-unit {
+            font-size: 1.6rem;
+            font-weight: 500;
+            opacity: 0.5;
+            margin-left: 8px;
+        }
+
+        .heart-rate-label {
+            font-size: 1.05rem;
+            opacity: 0.5;
+            margin-top: 6px;
+            font-weight: 500;
+        }
+
+        .heart-rate-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            border-radius: 100px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-top: 16px;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-normal {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(74, 222, 128, 0.1));
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.25);
+            box-shadow: 0 4px 16px -4px rgba(34, 197, 94, 0.25);
+        }
+
+        .status-elevated {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(252, 211, 77, 0.1));
+            color: #fcd34d;
+            border: 1px solid rgba(251, 191, 36, 0.25);
+            box-shadow: 0 4px 16px -4px rgba(251, 191, 36, 0.25);
+        }
+
+        .status-high {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(248, 113, 113, 0.1));
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            box-shadow: 0 4px 16px -4px rgba(239, 68, 68, 0.25);
+        }
+
+        /* CVD Risk Card - Premium Redesign */
+        .cvd-card {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            opacity: 1 !important;
+        }
+
+        .cvd-card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            opacity: 1;
+            margin-bottom: 24px;
+            letter-spacing: 0.02em;
+        }
+
+        .cvd-gauge {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 24px;
+        }
+
+        .cvd-gauge-bg {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: conic-gradient(rgba(35, 35, 55, 0.4) 0deg, rgba(25, 25, 45, 0.5) 360deg);
+            box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .cvd-gauge-fill {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: conic-gradient(#22c55e 0deg,
+                    #4ade80 var(--gauge-angle, 0deg),
+                    transparent var(--gauge-angle, 0deg));
+            transition: all 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+            filter: drop-shadow(0 0 12px rgba(34, 197, 94, 0.4));
+        }
+
+        .cvd-gauge::after {
+            content: '';
+            position: absolute;
+            inset: 5px;
+            border-radius: 50%;
+            border: 2px dashed rgba(255, 255, 255, 0.1);
+            animation: rotateDashed 30s linear infinite;
+        }
+
+        @keyframes rotateDashed {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .cvd-gauge-inner {
+            position: absolute;
+            inset: 18px;
+            background: linear-gradient(145deg, rgba(35, 35, 55, 0.95), rgba(25, 25, 45, 1));
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow:
+                inset 0 0 30px rgba(0, 0, 0, 0.3),
+                0 0 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .light .cvd-gauge-inner {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 255, 0.95));
+            border-color: rgba(102, 126, 234, 0.1);
+            box-shadow:
+                inset 0 0 30px rgba(102, 126, 234, 0.05),
+                0 0 20px rgba(102, 126, 234, 0.1);
+        }
+
+        .cvd-value {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #4ade80, #22c55e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .cvd-label {
+            font-size: 0.85rem;
+            opacity: 1;
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .light .cvd-label {
+            color: rgba(0, 0, 0, 0.5);
+        }
+
+        .cvd-risk-level {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-top: 8px;
+            padding: 8px 24px;
+            border-radius: 100px;
+            background: rgba(34, 197, 94, 0.1);
+        }
+
+        .risk-low {
+            color: #4ade80;
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(74, 222, 128, 0.08));
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .risk-moderate {
+            color: #fcd34d;
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(252, 211, 77, 0.08));
+            border: 1px solid rgba(251, 191, 36, 0.2);
+        }
+
+        .risk-high {
+            color: #f87171;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(248, 113, 113, 0.08));
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        /* SpO2 Card Styles */
+        .spo2-card {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+            height: 100%;
+            min-height: 280px;
+            justify-content: center;
+        }
+
+        .spo2-icon-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .spo2-icon-bg {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(96, 165, 250, 0.25));
+            border-radius: 50%;
+            animation: spo2Pulse 2s ease-in-out infinite;
+            filter: blur(8px);
+        }
+
+        .spo2-icon-container::before {
+            content: '';
+            position: absolute;
+            inset: -15px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: spo2Glow 2s ease-in-out infinite;
+        }
+
+        @keyframes spo2Glow {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 0.5;
+            }
+
+            50% {
+                transform: scale(1.2);
+                opacity: 0.8;
+            }
+        }
+
+        @keyframes spo2Pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.2);
+                opacity: 0.6;
+            }
+        }
+
+        .spo2-icon {
+            font-size: 56px;
+            position: relative;
+            z-index: 1;
+            animation: spo2Beat 2s ease-in-out infinite;
+            filter: drop-shadow(0 4px 12px rgba(59, 130, 246, 0.4));
+        }
+
+        @keyframes spo2Beat {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        .spo2-value {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 4.5rem;
+            font-weight: 700;
+            line-height: 1;
+            background: linear-gradient(135deg, #3b82f6, #60a5fa, #93c5fd);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 3s ease-in-out infinite;
+            text-shadow: 0 0 60px rgba(59, 130, 246, 0.3);
+        }
+
+        .spo2-unit {
+            font-size: 1.6rem;
+            font-weight: 500;
+            opacity: 0.5;
+            margin-left: 8px;
+        }
+
+        .spo2-label {
+            font-size: 1.05rem;
+            opacity: 0.5;
+            margin-top: 6px;
+            font-weight: 500;
+        }
+
+        .spo2-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            border-radius: 100px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-top: 16px;
+            backdrop-filter: blur(10px);
+        }
+
+        .spo2-status.status-normal {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(74, 222, 128, 0.1));
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.25);
+            box-shadow: 0 4px 16px -4px rgba(34, 197, 94, 0.25);
+        }
+
+        .spo2-status.status-low {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(252, 211, 77, 0.1));
+            color: #fcd34d;
+            border: 1px solid rgba(251, 191, 36, 0.25);
+            box-shadow: 0 4px 16px -4px rgba(251, 191, 36, 0.25);
+        }
+
+        .spo2-status.status-critical {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(248, 113, 113, 0.1));
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            box-shadow: 0 4px 16px -4px rgba(239, 68, 68, 0.25);
+        }
+
+        /* Chart Card Styles */
+        .chart-card {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .chart-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .chart-legend {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .chart-container {
+            flex: 1;
+            position: relative;
+            min-height: 250px;
+        }
+
+        .chart-container canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .section-header-dashboard {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+            margin: 0;
+            padding-left: 8px;
+            border-left: 3px solid;
+            border-image: linear-gradient(180deg, #667eea, #764ba2) 1;
+        }
+
+        .light .section-header-dashboard {
+            color: rgba(0, 0, 0, 0.8);
+        }
+
+        /* Quick Stat Cards */
+        .quick-stat-card {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .quick-stat-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+        }
+
+        .dashboard-card:hover .quick-stat-icon {
+            transform: scale(1.08);
+        }
+
+        .quick-stat-info {
+            flex: 1;
+        }
+
+        .quick-stat-value {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .quick-stat-label {
+            font-size: 0.9rem;
+            opacity: 0.5;
+            margin-top: 6px;
+            font-weight: 500;
+        }
+
+        /* Time Period Tabs - Premium */
+        .period-tabs {
+            display: flex;
+            gap: 6px;
+            padding: 6px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+            border-radius: 18px;
+            margin-bottom: 0;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .daily-pulse-date {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.6);
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .light .daily-pulse-date {
+            color: rgba(0, 0, 0, 0.6);
+            background: rgba(102, 126, 234, 0.08);
+            border-color: rgba(102, 126, 234, 0.12);
+        }
+
+        .light .period-tabs {
+            background: linear-gradient(145deg, rgba(102, 126, 234, 0.08), rgba(102, 126, 234, 0.04));
+            border-color: rgba(102, 126, 234, 0.1);
+        }
+
+        .period-tab {
+            padding: 12px 28px;
+            border-radius: 14px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            background: transparent;
+            color: inherit;
+            opacity: 0.5;
+            position: relative;
+        }
+
+        .period-tab:hover {
+            opacity: 0.9;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .period-tab.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            opacity: 1;
+            box-shadow:
+                0 8px 24px -8px rgba(102, 126, 234, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        /* Chart Container - Premium */
+        .chart-container {
+            position: relative;
+            height: 320px;
+            width: 100%;
+            margin-top: 28px;
+            padding: 20px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.02), transparent);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .light .chart-container {
+            background: linear-gradient(145deg, rgba(102, 126, 234, 0.03), transparent);
+            border-color: rgba(102, 126, 234, 0.06);
+        }
+
+        .chart-container canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* Stats Grid - Premium */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-top: 28px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 24px 20px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--primary-gradient);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-4px);
+            border-color: rgba(102, 126, 234, 0.2);
+            box-shadow: 0 12px 32px -12px rgba(102, 126, 234, 0.25);
+        }
+
+        .stat-item:hover::before {
+            opacity: 1;
+        }
+
+        .light .stat-item {
+            background: linear-gradient(145deg, rgba(102, 126, 234, 0.06), rgba(102, 126, 234, 0.03));
+            border-color: rgba(102, 126, 234, 0.08);
+        }
+
+        .stat-item-value {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .stat-item-label {
+            font-size: 0.85rem;
+            opacity: 0.5;
+            margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .stat-min .stat-item-value {
+            background: linear-gradient(135deg, #60a5fa, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-max .stat-item-value {
+            background: linear-gradient(135deg, #f472b6, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-avg .stat-item-value {
+            background: linear-gradient(135deg, #a78bfa, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Last Updated - Premium */
+        .last-updated {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+            font-size: 0.9rem;
+            opacity: 0.6;
+            margin-top: 28px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.02), transparent);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .light .last-updated {
+            background: linear-gradient(145deg, rgba(102, 126, 234, 0.03), transparent);
+            border-color: rgba(102, 126, 234, 0.06);
+        }
+
+        .last-updated-dot {
+            width: 10px;
+            height: 10px;
+            background: linear-gradient(135deg, #4ade80, #22c55e);
+            border-radius: 50%;
+            animation: pulseGlow 2s infinite;
+            box-shadow: 0 0 12px rgba(34, 197, 94, 0.5);
+        }
+
+        @keyframes pulseGlow {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+                box-shadow: 0 0 12px rgba(34, 197, 94, 0.5);
+            }
+
+            50% {
+                opacity: 0.7;
+                transform: scale(1.1);
+                box-shadow: 0 0 20px rgba(34, 197, 94, 0.7);
+            }
+        }
+
+        /* Dashboard Responsive */
+        @media (max-width: 1024px) {
+            .card-half {
+                grid-column: span 12;
+            }
+
+            .card-third {
+                grid-column: span 6;
+            }
+
+            .card-quarter {
+                grid-column: span 6;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-content {
+                padding: 24px;
+            }
+
+            .dashboard-header {
+                padding: 20px 24px;
+            }
+
+            .card-third {
+                grid-column: span 12;
+            }
+
+            .card-quarter {
+                grid-column: span 12;
+            }
+
+            .heart-rate-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .period-tabs {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .chart-container {
+                height: 250px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .dashboard-container {
+                border-radius: 24px;
+            }
+
+            .dashboard-header {
+                border-radius: 24px 24px 0 0;
+            }
+
+            .dashboard-title {
+                font-size: 1.2rem;
+            }
+
+            .heart-rate-value {
+                font-size: 3rem;
+            }
+        }
+    </style>
+</head>
+
+<body class="dark">
+    <!-- Animated background layers -->
+    <div class="mesh-bg"></div>
+    <canvas id="particles-canvas"></canvas>
+    <div class="noise"></div>
+    <div class="cursor-glow" id="cursor-glow"></div>
+
+    <!-- Navigation -->
+    <nav class="nav flex items-center justify-between" id="nav">
+        <div class="flex items-center gap-3">
+            <svg class="heartbeat" width="40" height="40" viewBox="0 0 120 120" fill="none"
+                xmlns="http://www.w3.org/2000/svg">
+                <circle cx="60" cy="60" r="50" stroke="url(#navGrad)" stroke-width="3" />
+                <path d="M40 60 L50 70 L80 40" stroke="url(#navGrad)" stroke-width="4" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <circle cx="60" cy="60" r="8" fill="url(#navGrad)" />
+                <defs>
+                    <linearGradient id="navGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#667eea" />
+                        <stop offset="100%" style="stop-color:#764ba2" />
+                    </linearGradient>
+                </defs>
+            </svg>
+            <span class="font-bold text-xl tracking-tight">ArchoAI</span>
+        </div>
+        <div class="hidden md:flex items-center gap-8">
+            <a href="#technologies" class="hover:text-purple-400 transition-colors font-medium">Технологии</a>
+            <a href="#advantages" class="hover:text-purple-400 transition-colors font-medium">Преимущества</a>
+            <a href="#about" class="hover:text-purple-400 transition-colors font-medium">О проекте</a>
+            <a href="#contact" class="hover:text-purple-400 transition-colors font-medium">Контакты</a>
+
+            <!-- Auth buttons (shown when logged out) -->
+            <div id="auth-buttons" class="flex items-center gap-3">
+                <button class="nav-auth-btn nav-login-btn" onclick="openLoginModal()">Sign In</button>
+                <button class="nav-auth-btn nav-signup-btn" onclick="openSignupModal()">Sign Up</button>
+            </div>
+
+            <!-- User menu (shown when logged in) -->
+            <div id="user-menu" class="user-menu" style="display: none;">
+                <div class="user-avatar" id="user-avatar">U</div>
+                <div class="user-dropdown">
+                    <div class="px-4 py-2 mb-2">
+                        <p class="font-semibold" id="user-name">User</p>
+                        <p class="text-sm opacity-60" id="user-email">user@email.com</p>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item" onclick="openDashboard()">
+                        <span>📊</span> <span>My Dashboard</span>
+                    </div>
+                    <div class="dropdown-item" onclick="openSettings()">
+                        <span>⚙️</span> <span>Settings</span>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item" style="color: #ef4444;" onclick="logout()">
+                        <span>🚪</span> <span>Log Out</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Menu Button -->
+        <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Toggle menu">
+            <span class="hamburger-line"></span>
+            <span class="hamburger-line"></span>
+            <span class="hamburger-line"></span>
+        </button>
+    </nav>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu-overlay" id="mobile-menu-overlay" onclick="closeMobileMenu()"></div>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu" id="mobile-menu">
+        <!-- Navigation Links -->
+        <nav class="mobile-menu-links">
+            <a href="#features" class="mobile-menu-link" onclick="closeMobileMenu()">Features</a>
+            <a href="#about" class="mobile-menu-link" onclick="closeMobileMenu()">About</a>
+            <a href="#pricing" class="mobile-menu-link" onclick="closeMobileMenu()">Pricing</a>
+            <a href="#contact" class="mobile-menu-link" onclick="closeMobileMenu()">Contact</a>
+        </nav>
+
+        <!-- Auth Section (shown when logged out) -->
+        <div class="mobile-auth-section" id="mobile-auth-section">
+            <div class="mobile-auth-buttons">
+                <button class="mobile-auth-btn mobile-login-btn" onclick="openLoginModal(); closeMobileMenu();">Sign
+                    In</button>
+                <button class="mobile-auth-btn mobile-signup-btn" onclick="openSignupModal(); closeMobileMenu();">Sign
+                    Up</button>
+            </div>
+        </div>
+
+        <!-- User Section (shown when logged in) -->
+        <div class="mobile-user-section" id="mobile-user-section" style="display: none;">
+            <div class="mobile-user-info">
+                <div class="mobile-user-avatar" id="mobile-user-avatar">U</div>
+                <div class="mobile-user-details">
+                    <div class="mobile-user-name" id="mobile-user-name">User</div>
+                    <div class="mobile-user-email" id="mobile-user-email">user@email.com</div>
+                </div>
+            </div>
+            <div class="mobile-menu-actions">
+                <button class="mobile-menu-action" onclick="openDashboard(); closeMobileMenu();">
+                    <span>📊</span> <span>My Dashboard</span>
+                </button>
+                <button class="mobile-menu-action" onclick="openSettings(); closeMobileMenu();">
+                    <span>⚙️</span> <span>Settings</span>
+                </button>
+                <button class="mobile-menu-action logout" onclick="logout(); closeMobileMenu();">
+                    <span>🚪</span> <span>Log Out</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Theme Toggle -->
+    <div class="theme-toggle glass flex items-center justify-center" onclick="toggleTheme()" id="theme-toggle">
+        <svg id="theme-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z">
+            </path>
+        </svg>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="min-h-screen flex items-center justify-center px-6 py-20 relative z-10">
+        <div class="max-w-7xl mx-auto text-center">
+            <!-- Animated Logo -->
+            <div class="mb-12 flex justify-center">
+                <div class="floating">
+                    <svg class="heartbeat" width="140" height="140" viewBox="0 0 120 120" fill="none"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#667eea" />
+                                <stop offset="50%" style="stop-color:#764ba2" />
+                                <stop offset="100%" style="stop-color:#f093fb" />
+                            </linearGradient>
+                            <filter id="glow">
+                                <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur" />
+                                    <feMergeNode in="SourceGraphic" />
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <circle cx="60" cy="60" r="55" stroke="url(#heroGrad)" stroke-width="2" opacity="0.3" />
+                        <circle cx="60" cy="60" r="50" stroke="url(#heroGrad)" stroke-width="3" filter="url(#glow)" />
+                        <path d="M40 60 L50 70 L80 40" stroke="url(#heroGrad)" stroke-width="4" stroke-linecap="round"
+                            stroke-linejoin="round" filter="url(#glow)" />
+                        <circle cx="60" cy="60" r="10" fill="url(#heroGrad)" filter="url(#glow)" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Live Signal Indicator -->
+            <div class="mb-10 flex items-center justify-center gap-3">
+                <div class="relative">
+                    <div class="w-3 h-3 rounded-full bg-emerald-400 live-pulse"></div>
+                </div>
+                <span class="text-sm font-semibold tracking-widest uppercase opacity-80">Live Monitoring Active</span>
+            </div>
+
+            <h1 class="hero-title mb-10 glow-text">
+                <span class="gradient-text">ArchoAI</span><br />
+                Искусственный интеллект<br />
+                для <span class="gradient-text">археологии</span>
+            </h1>
+
+            <p class="text-xl md:text-2xl opacity-60 max-w-3xl mx-auto mb-16 font-light leading-relaxed">
+                Инновационная система компьютерного зрения для автоматической классификации археологических находок на
+                базе
+                <span class="font-semibold opacity-100">Raspberry Pi 5</span>.
+            </p>
+
+            <!-- Device Image -->
+            <div class="glass glass-glow p-12 max-w-2xl mx-auto device-shadow floating" style="animation-delay: -3s;">
+                <img src="AtlasAI.jpeg" alt="AtlasAI System" class="w-full rounded-2xl" style="object-fit: cover;">
+            </div>
+
+            <!-- Scroll Indicator -->
+            <div class="scroll-indicator">
+                <div class="mouse">
+                    <div class="wheel"></div>
+                </div>
+                <span class="text-xs font-medium tracking-widest uppercase">Scroll to explore</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section class="min-h-screen flex items-center justify-center px-6 py-32 relative z-10" id="about">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-20">
+                <div class="line-decoration"></div>
+                <h2 class="section-title glow-text">О <span class="gradient-text">проекте</span></h2>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-12 stats-container">
+                <div class="glass glass-glow animated-border p-16 text-center bento-item card-3d">
+                    <div class="text-6xl mb-8">🏛️</div>
+                    <p class="text-2xl font-bold mb-4">Современные технологии</p>
+                    <p class="text-lg opacity-60 leading-relaxed">
+                        ArchoAI объединяет археологию и современные технологии,
+                        позволяя по-новому подходить к изучению прошлого.
+                    </p>
+                </div>
+
+                <div class="glass glass-glow animated-border p-16 text-center bento-item card-3d">
+                    <div class="text-6xl mb-8">🧠</div>
+                    <p class="text-2xl font-bold mb-4">Искусственный интеллект</p>
+                    <p class="text-lg opacity-60 leading-relaxed">
+                        Использование Raspberry Pi 5 и камеры делает систему доступной
+                        и перспективной для науки и образования.
+                    </p>
+                </div>
+            </div>
+
+            <div class="mt-20 text-center">
+                <p class="text-3xl md:text-4xl font-bold opacity-90 max-w-4xl mx-auto leading-relaxed">
+                    <span class="gradient-text">ArchoAI</span> — археология будущего
+                    <br class="hidden md:block" />
+                    из <span class="gradient-text">Казахстана</span>.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technologies Section - Hardware -->
+    <section class="min-h-screen flex items-center justify-center px-6 py-32 relative z-10" id="technologies">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-20">
+                <div class="line-decoration"></div>
+                <h2 class="section-title glow-text">
+                    Аппаратная <span class="gradient-text">часть</span>
+                </h2>
+            </div>
+
+            <div class="bento-grid">
+                <div class="glass glass-glow animated-border bento-item">
+                    <div class="feature-icon">🖥️</div>
+                    <h3 class="text-2xl font-bold mb-4">Raspberry Pi 5</h3>
+                    <p class="text-lg opacity-60 leading-relaxed">
+                        Центральный вычислительный модуль системы, который управляет камерой и обрабатывает
+                        изображения археологических объектов в реальном времени.
+                    </p>
+                </div>
+
+                <div class="glass glass-glow animated-border bento-item">
+                    <div class="feature-icon">📸</div>
+                    <h3 class="text-2xl font-bold mb-4">Камера USB</h3>
+                    <p class="text-lg opacity-60 leading-relaxed">
+                        Используется для точной фотофиксации находок и позволяет различать мелкие детали:
+                        трещины, орнаменты и следы обработки.
+                    </p>
+                </div>
+
+                <div class="glass glass-glow animated-border bento-item">
+                    <div class="feature-icon">🔋</div>
+                    <h3 class="text-2xl font-bold mb-4">Портативное питание</h3>
+                    <p class="text-lg opacity-60 leading-relaxed">
+                        Обеспечивает автономную работу системы в полевых условиях без
+                        подключения к электросети.
+                    </p>
+                </div>
+
+                <div class="glass glass-glow animated-border bento-item">
+                    <div class="feature-icon">🛡️</div>
+                    <h3 class="text-2xl font-bold mb-4">Защитный корпус</h3>
+                    <p class="text-lg opacity-60 leading-relaxed">
+                        Защищает оборудование от пыли, влаги и механических повреждений
+                        при работе на раскопках.
+                    </p>
+                </div>
+
+                <div class="glass glass-glow animated-border bento-item">
+                    <div class="feature-icon">🐍</div>
+                    <h3 class="text-2xl font-bold mb-4">Python + PyTorch</h3>
+                    <p class="text-lg opacity-60 leading-relaxed">
+                        Основной язык программирования с фреймворком глубокого обучения
+                        для создания нейронных сетей.
+                    </p>
+                </div>
+
+                <div class="glass glass-glow animated-border bento-item">
+                    <div class="feature-icon">👁️</div>
+                    <h3 class="text-2xl font-bold mb-4">OpenCV</h3>
+                    <p class="text-lg opacity-60 leading-relaxed">
+                        Библиотека компьютерного зрения для анализа изображений, выделения контуров
+                        и распознавания объектов.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Advantages Section -->
+    <section class="min-h-screen flex items-center justify-center px-6 py-32 relative z-10" id="advantages">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-20">
+                <div class="line-decoration"></div>
+                <h2 class="section-title glow-text">
+                    Преимущества <span class="gradient-text">проекта</span>
+                </h2>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div class="glass glass-glow animated-border p-10 bento-item text-center">
+                    <div class="text-5xl mb-6">📸</div>
+                    <h3 class="text-2xl font-bold mb-4">Автоматическая фиксация</h3>
+                    <p class="opacity-60 leading-relaxed">
+                        Мгновенная фотофиксация и классификация находок.
+                    </p>
+                </div>
+
+                <div class="glass glass-glow animated-border p-10 bento-item text-center">
+                    <div class="text-5xl mb-6">⚡</div>
+                    <h3 class="text-2xl font-bold mb-4">Быстрая обработка</h3>
+                    <p class="opacity-60 leading-relaxed">
+                        Анализ изображений в реальном времени.
+                    </p>
+                </div>
+
+                <div class="glass glass-glow animated-border p-10 bento-item text-center">
+                    <div class="text-5xl mb-6">🧠</div>
+                    <h3 class="text-2xl font-bold mb-4">Минимизация ошибок</h3>
+                    <p class="opacity-60 leading-relaxed">
+                        AI снижает человеческий фактор.
+                    </p>
+                </div>
+
+                <div class="glass glass-glow animated-border p-10 bento-item text-center">
+                    <div class="text-5xl mb-6">💰</div>
+                    <h3 class="text-2xl font-bold mb-4">Низкая стоимость</h3>
+                    <p class="opacity-60 leading-relaxed">
+                        Доступнее лабораторного оборудования.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Target Markets -->
+    <section class="min-h-screen flex items-center justify-center px-6 py-32 relative z-10">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-20">
+                <div class="line-decoration"></div>
+                <h2 class="section-title glow-text">
+                    Создано для <span class="gradient-text">всех</span>
+                </h2>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-12">
+                <div class="glass glass-glow animated-border p-12 bento-item">
+                    <div class="text-5xl mb-6">🏛️</div>
+                    <h3 class="text-2xl font-bold mb-6">Музеи</h3>
+                    <p class="text-lg opacity-60 mb-8 leading-relaxed">
+                        Каталогизируйте и анализируйте коллекции с помощью
+                        передовых технологий искусственного интеллекта.
+                    </p>
+                    <ul class="space-y-4 text-left opacity-80">
+                        <li class="flex items-center gap-4">
+                            <span
+                                class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">✓</span>
+                            <span>Автоматическая каталогизация</span>
+                        </li>
+                        <li class="flex items-center gap-4">
+                            <span
+                                class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">✓</span>
+                            <span>Оценка состояния экспонатов</span>
+                        </li>
+                        <li class="flex items-center gap-4">
+                            <span
+                                class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">✓</span>
+                            <span>Цифровой архив находок</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="glass glass-glow animated-border p-12 bento-item">
+                    <div class="text-5xl mb-6">🔬</div>
+                    <h3 class="text-2xl font-bold mb-6">Исследовательские институты</h3>
+                    <p class="text-lg opacity-60 mb-8 leading-relaxed">
+                        Ускорьте научные исследования с помощью ArchoAI —
+                        вашего надежного помощника в анализе артефактов.
+                    </p>
+                    <ul class="space-y-4 text-left opacity-80">
+                        <li class="flex items-center gap-4">
+                            <span
+                                class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">✓</span>
+                            <span>Точная датировка эпохи</span>
+                        </li>
+                        <li class="flex items-center gap-4">
+                            <span
+                                class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">✓</span>
+                            <span>Анализ материалов</span>
+                        </li>
+                        <li class="flex items-center gap-4">
+                            <span
+                                class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">✓</span>
+                            <span>Экспорт данных для публикаций</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="glass glass-glow animated-border p-12 bento-item">
+                    <div class="text-5xl mb-6">⛏️</div>
+                    <h3 class="text-2xl font-bold mb-6">Полевые археологи</h3>
+                    <p class="text-lg opacity-60 mb-8 leading-relaxed">
+                        Портативное решение для анализа находок прямо
+                        на месте раскопок.
+                    </p>
+                    <ul class="space-y-4 text-left opacity-80">
+                        <li class="flex items-center gap-4">
+                            <span
+                                class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">✓</span>
+                            <span>Мгновенный анализ на месте</span>
+                        </li>
+                        <li class="flex items-center gap-4">
+                            <span
+                                class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">✓</span>
+                            <span>Обнаружение повреждений</span>
+                        </li>
+                        <li class="flex items-center gap-4">
+                            <span
+                                class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">✓</span>
+                            <span>Облачная синхронизация</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="min-h-screen flex items-center justify-center px-6 py-32 relative z-10" id="pricing">
+        <div class="max-w-4xl mx-auto text-center">
+            <div class="text-center mb-20">
+                <div class="line-decoration"></div>
+                <h2 class="section-title glow-text">Стартовая <span class="gradient-text">цена</span></h2>
+                <p class="text-2xl opacity-60 mt-6">
+                    Инновационные технологии по доступной цене.
+                </p>
+            </div>
+
+            <div class="glass glass-glow animated-border p-16 max-w-2xl mx-auto relative overflow-hidden">
+                <!-- Decorative elements -->
+                <div class="absolute top-0 right-0 w-40 h-40 bg-purple-600/20 rounded-full blur-3xl"></div>
+                <div class="absolute bottom-0 left-0 w-40 h-40 bg-blue-600/20 rounded-full blur-3xl"></div>
+
+                <div class="relative z-10">
+                    <div
+                        class="inline-block px-4 py-2 rounded-full bg-gradient-to-r from-purple-600/20 to-blue-600/20 text-sm font-semibold mb-6 border border-purple-500/30">
+                        🏺 Полный комплект ArchoAI
+                    </div>
+
+                    <div class="mb-8">
+                        <div class="flex items-end justify-center gap-2 mb-4">
+                            <span class="text-7xl font-black gradient-text price-highlight">100,000</span>
+                            <span class="text-3xl opacity-60 mb-2">₸</span>
+                        </div>
+                        <div class="text-xl opacity-60">≈ $200 USD</div>
+                    </div>
+
+                    <div class="border-t border-white/10 pt-10 mt-10">
+                        <ul class="text-left space-y-4 mb-10">
+                            <li class="flex items-center gap-3">
+                                <span class="text-emerald-400">✓</span>
+                                <span>Raspberry Pi 5 с предустановленным ПО</span>
+                            </li>
+                            <li class="flex items-center gap-3">
+                                <span class="text-emerald-400">✓</span>
+                                <span>Высококачественная USB-камера</span>
+                            </li>
+                            <li class="flex items-center gap-3">
+                                <span class="text-emerald-400">✓</span>
+                                <span>Защитный корпус для полевых условий</span>
+                            </li>
+                            <li class="flex items-center gap-3">
+                                <span class="text-emerald-400">✓</span>
+                                <span>Бесплатные обновления ИИ на 1 год</span>
+                            </li>
+                        </ul>
+
+                        <button class="btn-primary w-full md:w-auto">
+                            Заказать ArchoAI →
+                        </button>
+
+                        <p class="text-sm opacity-40 mt-6">Бесплатная доставка по Казахстану • Гарантия 12 месяцев</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact/Footer -->
+    <section class="px-6 py-32 relative z-10" id="contact">
+        <div class="max-w-7xl mx-auto">
+            <div class="glass glass-glow p-16 text-center">
+                <div class="line-decoration"></div>
+                <h2 class="text-4xl font-bold mb-16 glow-text">Get in <span class="gradient-text">Touch</span></h2>
+
+                <div class="grid md:grid-cols-3 gap-12 mb-16">
+                    <div class="group">
+                        <div
+                            class="contact-icon mx-auto group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-blue-600">
+                            <span class="text-xl">📞</span>
+                        </div>
+                        <p class="font-bold mb-2">Phone</p>
+                        <a href="tel:+77066968011"
+                            class="text-lg opacity-60 hover:opacity-100 hover:text-purple-400 transition-all">
+                            +7 706 696 8011
+                        </a>
+                    </div>
+
+                    <div class="group">
+                        <div
+                            class="contact-icon mx-auto group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-blue-600">
+                            <span class="text-xl">✉️</span>
+                        </div>
+                        <p class="font-bold mb-2">Email</p>
+                        <a href="mailto:alihanmurzakmetov15@gmail.com"
+                            class="text-lg opacity-60 hover:opacity-100 hover:text-purple-400 transition-all break-all">
+                            alihanmurzakmetov15@gmail.com
+                        </a>
+                    </div>
+
+                    <div class="group">
+                        <div
+                            class="contact-icon mx-auto group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-blue-600">
+                            <span class="text-xl">💬</span>
+                        </div>
+                        <p class="font-bold mb-2">Telegram</p>
+                        <a href="https://t.me/dialikhan_na"
+                            class="text-lg opacity-60 hover:opacity-100 hover:text-purple-400 transition-all">
+                            @dialikhan_na
+                        </a>
+                    </div>
+                </div>
+
+                <div class="border-t border-white/10 pt-12">
+                    <div class="flex justify-center mb-8">
+                        <div class="floating" style="animation-duration: 5s;">
+                            <svg class="heartbeat" width="70" height="70" viewBox="0 0 120 120" fill="none"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <defs>
+                                    <linearGradient id="footerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" style="stop-color:#667eea" />
+                                        <stop offset="50%" style="stop-color:#764ba2" />
+                                        <stop offset="100%" style="stop-color:#f093fb" />
+                                    </linearGradient>
+                                </defs>
+                                <circle cx="60" cy="60" r="50" stroke="url(#footerGrad)" stroke-width="3" />
+                                <path d="M40 60 L50 70 L80 40" stroke="url(#footerGrad)" stroke-width="4"
+                                    stroke-linecap="round" stroke-linejoin="round" />
+                                <circle cx="60" cy="60" r="8" fill="url(#footerGrad)" />
+                            </svg>
+                        </div>
+                    </div>
+                    <p class="text-3xl font-bold mb-3 gradient-text">ArchoAI</p>
+                    <p class="opacity-50 text-lg">
+                        Археология будущего из Казахстана
+                    </p>
+                    <p class="opacity-30 mt-10 text-sm">
+                        © 2026 ArchoAI. Все права защищены.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Login Modal -->
+    <div class="auth-modal-overlay" id="login-modal">
+        <div class="auth-modal">
+            <button class="auth-modal-close" onclick="closeModals()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+            </button>
+
+            <div class="text-center mb-8">
+                <div class="flex justify-center mb-4">
+                    <svg width="50" height="50" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="modalGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#667eea" />
+                                <stop offset="100%" style="stop-color:#764ba2" />
+                            </linearGradient>
+                        </defs>
+                        <circle cx="60" cy="60" r="50" stroke="url(#modalGrad)" stroke-width="3" />
+                        <path d="M40 60 L50 70 L80 40" stroke="url(#modalGrad)" stroke-width="4" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                        <circle cx="60" cy="60" r="8" fill="url(#modalGrad)" />
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold mb-2">Welcome Back!</h2>
+                <p class="opacity-60">Sign in to your CerebroBand account</p>
+            </div>
+
+            <div id="login-error" class="auth-error mb-4"></div>
+
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <input type="email" class="auth-input" id="login-email" placeholder="Email" required>
+                </div>
+                <div>
+                    <input type="password" class="auth-input" id="login-password" placeholder="Password" required>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="remember-me" class="w-4 h-4 rounded">
+                        <span class="opacity-70">Remember me</span>
+                    </label>
+                    <span class="auth-link">Forgot password?</span>
+                </div>
+                <button type="submit" class="auth-btn mt-6">Sign In</button>
+            </form>
+
+            <div class="auth-divider">or</div>
+
+            <p class="text-center text-sm opacity-70">
+                Don't have an account? <span class="auth-link" onclick="switchToSignup()">Sign up</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Signup Modal -->
+    <div class="auth-modal-overlay" id="signup-modal">
+        <div class="auth-modal">
+            <button class="auth-modal-close" onclick="closeModals()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+            </button>
+
+            <div class="text-center mb-8">
+                <div class="flex justify-center mb-4">
+                    <svg width="50" height="50" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="modalGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#667eea" />
+                                <stop offset="100%" style="stop-color:#764ba2" />
+                            </linearGradient>
+                        </defs>
+                        <circle cx="60" cy="60" r="50" stroke="url(#modalGrad2)" stroke-width="3" />
+                        <path d="M40 60 L50 70 L80 40" stroke="url(#modalGrad2)" stroke-width="4" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                        <circle cx="60" cy="60" r="8" fill="url(#modalGrad2)" />
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold mb-2">Create Account</h2>
+                <p class="opacity-60">Join the healthcare revolution</p>
+            </div>
+
+            <div id="signup-error" class="auth-error mb-4"></div>
+            <div id="signup-success" class="auth-success mb-4"></div>
+
+            <form id="signup-form" class="space-y-4">
+                <div>
+                    <input type="text" class="auth-input" id="signup-name" placeholder="Full Name" required>
+                </div>
+                <div>
+                    <input type="email" class="auth-input" id="signup-email" placeholder="Email" required>
+                </div>
+                <div>
+                    <input type="password" class="auth-input" id="signup-password" placeholder="Password" required
+                        minlength="6">
+                </div>
+                <div>
+                    <input type="password" class="auth-input" id="signup-confirm" placeholder="Confirm Password"
+                        required>
+                </div>
+                <label class="flex items-start gap-3 cursor-pointer text-sm">
+                    <input type="checkbox" id="terms" class="w-4 h-4 rounded mt-0.5" required>
+                    <span class="opacity-70">I agree to the <span class="auth-link">Terms of Service</span> and <span
+                            class="auth-link">Privacy Policy</span></span>
+                </label>
+                <button type="submit" class="auth-btn mt-6">Create Account</button>
+            </form>
+
+            <div class="auth-divider">or</div>
+
+            <p class="text-center text-sm opacity-70">
+                Already have an account? <span class="auth-link" onclick="switchToLogin()">Sign in</span>
+            </p>
+        </div>
+    </div>
+    </section>
+
+
+
+    <!-- Health Dashboard -->
+    <div class="dashboard-overlay" id="dashboard-overlay" onclick="closeDashboardOnOverlay(event)">
+        <div class="dashboard-container">
+            <!-- Dashboard Header -->
+            <div class="dashboard-header">
+                <div class="dashboard-header-left">
+                    <svg class="dashboard-logo heartbeat" viewBox="0 0 120 120" fill="none"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="dashGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#667eea" />
+                                <stop offset="50%" style="stop-color:#764ba2" />
+                                <stop offset="100%" style="stop-color:#f093fb" />
+                            </linearGradient>
+                            <filter id="glow">
+                                <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur" />
+                                    <feMergeNode in="SourceGraphic" />
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <circle cx="60" cy="60" r="52" stroke="url(#dashGrad)" stroke-width="3" fill="none"
+                            opacity="0.3" />
+                        <circle cx="60" cy="60" r="45" stroke="url(#dashGrad)" stroke-width="4" fill="none"
+                            filter="url(#glow)" />
+                        <path d="M35 58 L48 58 L55 42 L65 75 L72 58 L85 58" stroke="url(#dashGrad)" stroke-width="4"
+                            stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#glow)" />
+                    </svg>
+                    <div>
+                        <div class="dashboard-title">ArchoAI Dashboard</div>
+                        <div class="dashboard-subtitle">Анализ археологических находок</div>
+                    </div>
+                </div>
+                <button class="dashboard-close" onclick="closeDashboard()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Dashboard Content -->
+            <div class="dashboard-content">
+                <div class="dashboard-grid">
+
+                    <!-- Gemini AI Analysis Card -->
+                    <div
+                        style="flex: 1 1 calc(50% - 10px); min-height: 400px; background: linear-gradient(145deg, #232337, #19192d); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 28px; padding: 32px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);">
+                        <div class="dashboard-card">
+                            <h3 class="text-xl font-bold"
+                                style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 24px;">🏺</span> AI Анализ
+                            </h3>
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                <div
+                                    style="padding: 12px; background: rgba(168, 85, 247, 0.1); border-radius: 12px; border-left: 3px solid #a855f7;">
+                                    <div style="font-size: 12px; opacity: 0.6; margin-bottom: 4px;">Тип артефакта</div>
+                                    <div id="gemini-artifact-type" style="font-size: 14px; font-weight: 500;">--</div>
+                                </div>
+                                <div
+                                    style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; border-left: 3px solid #3b82f6;">
+                                    <div style="font-size: 12px; opacity: 0.6; margin-bottom: 4px;">Материал</div>
+                                    <div id="gemini-material" style="font-size: 14px; font-weight: 500;">--</div>
+                                </div>
+                                <div
+                                    style="padding: 12px; background: rgba(34, 197, 94, 0.1); border-radius: 12px; border-left: 3px solid #22c55e;">
+                                    <div style="font-size: 12px; opacity: 0.6; margin-bottom: 4px;">Эпоха</div>
+                                    <div id="gemini-era" style="font-size: 14px; font-weight: 500;">--</div>
+                                </div>
+                                <div
+                                    style="padding: 12px; background: rgba(249, 115, 22, 0.1); border-radius: 12px; border-left: 3px solid #f97316;">
+                                    <div style="font-size: 12px; opacity: 0.6; margin-bottom: 4px;">Назначение</div>
+                                    <div id="gemini-purpose" style="font-size: 14px; font-weight: 500;">--</div>
+                                </div>
+                                <div
+                                    style="padding: 12px; background: rgba(239, 68, 68, 0.1); border-radius: 12px; border-left: 3px solid #ef4444;">
+                                    <div style="font-size: 12px; opacity: 0.6; margin-bottom: 4px;">Состояние</div>
+                                    <div id="gemini-condition" style="font-size: 13px; line-height: 1.4;">--</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Crack Detection Card -->
+                    <div
+                        style="flex: 1 1 calc(50% - 10px); min-height: 400px; background: linear-gradient(145deg, #232337, #19192d); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 28px; padding: 32px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);">
+                        <div class="cvd-card">
+                            <h3 class="text-xl font-bold" style="margin-bottom: 20px;">🔍 Обнаружение трещин</h3>
+                            <div class="cvd-gauge" id="crack-gauge">
+                                <div class="cvd-gauge-bg"></div>
+                                <div class="cvd-gauge-fill" id="crack-gauge-fill"></div>
+                                <div class="cvd-gauge-inner">
+                                    <span class="cvd-value" id="crack-percentage">--%</span>
+                                    <span class="cvd-label">Повреждения</span>
+                                </div>
+                            </div>
+                            <div class="cvd-risk-level" id="crack-result">Анализ...</div>
+                            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                <div
+                                    style="flex: 1; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 12px; text-align: center;">
+                                    <div style="font-size: 11px; opacity: 0.6;">Пикселей трещин</div>
+                                    <div id="crack-pixels" style="font-size: 18px; font-weight: 600; color: #f87171;">--
+                                    </div>
+                                </div>
+                                <div
+                                    style="flex: 1; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 12px; text-align: center;">
+                                    <div style="font-size: 11px; opacity: 0.6;">Всего пикселей</div>
+                                    <div id="total-pixels" style="font-size: 18px; font-weight: 600; color: #60a5fa;">--
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- History Section -->
+                <div style="margin-top: 32px; margin-bottom: 24px; background: linear-gradient(145deg, #232337, #19192d); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 28px; padding: 32px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);">
+                    <h3 class="text-xl font-bold" style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 24px;">🕰️</span> История анализов
+                    </h3>
+                    <div style="max-height: 250px; overflow-y: auto; padding-right: 10px;" id="history-container">
+                        <div style="text-align: center; opacity: 0.5; padding: 20px;">Загрузка истории...</div>
+                    </div>
+                </div>
+
+                <!-- Last Updated -->
+                <div class="last-updated">
+                    <span class="last-updated-dot"></span>
+                    <span>Обновлено: <span id="last-updated-time">Только что</span></span>
+                </div>"
+            </div>
+        </div>
+    </div>
+
+    <script>
+        gsap.registerPlugin(ScrollTrigger);
+
+        // Particle animation
+        const canvas = document.getElementById('particles-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 2 + 0.5;
+                this.speedX = (Math.random() - 0.5) * 0.5;
+                this.speedY = (Math.random() - 0.5) * 0.5;
+                this.opacity = Math.random() * 0.5 + 0.2;
+                this.color = `hsla(${250 + Math.random() * 60}, 70%, 60%, ${this.opacity})`;
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+
+                if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
+                    this.reset();
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        // Create particles
+        for (let i = 0; i < 80; i++) {
+            particles.push(new Particle());
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            particles.forEach(particle => {
+                particle.update();
+                particle.draw();
+            });
+
+            // Draw connections
+            particles.forEach((a, i) => {
+                particles.slice(i + 1).forEach(b => {
+                    const dx = a.x - b.x;
+                    const dy = a.y - b.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < 150) {
+                        ctx.beginPath();
+                        ctx.moveTo(a.x, a.y);
+                        ctx.lineTo(b.x, b.y);
+                        ctx.strokeStyle = `rgba(102, 126, 234, ${0.1 * (1 - distance / 150)})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                });
+            });
+
+            requestAnimationFrame(animateParticles);
+        }
+
+        animateParticles();
+
+        // Cursor glow effect
+        const cursorGlow = document.getElementById('cursor-glow');
+        let mouseX = 0, mouseY = 0;
+        let glowX = 0, glowY = 0;
+
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        function updateCursorGlow() {
+            glowX += (mouseX - glowX) * 0.1;
+            glowY += (mouseY - glowY) * 0.1;
+            cursorGlow.style.left = glowX + 'px';
+            cursorGlow.style.top = glowY + 'px';
+            requestAnimationFrame(updateCursorGlow);
+        }
+
+        updateCursorGlow();
+
+        // Theme toggle
+        function toggleTheme() {
+            const body = document.body;
+            const icon = document.getElementById('theme-icon');
+            const toggle = document.getElementById('theme-toggle');
+
+            toggle.style.transform = 'scale(0.9) rotate(180deg)';
+
+            setTimeout(() => {
+                if (body.classList.contains('dark')) {
+                    body.classList.remove('dark');
+                    body.classList.add('light');
+                    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>';
+                } else {
+                    body.classList.remove('light');
+                    body.classList.add('dark');
+                    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>';
+                }
+                toggle.style.transform = 'scale(1) rotate(0deg)';
+            }, 200);
+        }
+
+        // Mobile Menu Functions
+        function toggleMobileMenu() {
+            const mobileMenu = document.getElementById('mobile-menu');
+            const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+            const mobileMenuOverlay = document.getElementById('mobile-menu-overlay');
+
+            mobileMenu.classList.toggle('active');
+            mobileMenuBtn.classList.toggle('active');
+            mobileMenuOverlay.classList.toggle('active');
+            document.body.classList.toggle('mobile-menu-open');
+        }
+
+        function closeMobileMenu() {
+            const mobileMenu = document.getElementById('mobile-menu');
+            const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+            const mobileMenuOverlay = document.getElementById('mobile-menu-overlay');
+
+            mobileMenu.classList.remove('active');
+            mobileMenuBtn.classList.remove('active');
+            mobileMenuOverlay.classList.remove('active');
+            document.body.classList.remove('mobile-menu-open');
+        }
+
+        // Close mobile menu on window resize if screen becomes larger
+        window.addEventListener('resize', () => {
+            if (window.innerWidth >= 768) {
+                closeMobileMenu();
+            }
+        });
+
+        // Close mobile menu on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeMobileMenu();
+            }
+        });
+
+        // Navigation scroll effect
+        const nav = document.getElementById('nav');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 100) {
+                nav.classList.add('scrolled');
+            } else {
+                nav.classList.remove('scrolled');
+            }
+        });
+
+        // GSAP Animations
+        // Hero animations
+        gsap.from('.hero-title', {
+            y: 100,
+            opacity: 0,
+            duration: 1.5,
+            ease: 'power4.out',
+        });
+
+        gsap.from('.device-shadow', {
+            y: 80,
+            opacity: 0,
+            duration: 1.5,
+            delay: 0.4,
+            ease: 'power3.out',
+        });
+
+        // Animate bento items on scroll
+        gsap.utils.toArray('.bento-item').forEach((item, i) => {
+            gsap.from(item, {
+                scrollTrigger: {
+                    trigger: item,
+                    start: 'top 85%',
+                    end: 'bottom 20%',
+                    toggleActions: 'play none none reverse',
+                },
+                y: 80,
+                opacity: 0,
+                duration: 0.8,
+                delay: i % 3 * 0.1,
+                ease: 'power3.out',
+            });
+        });
+
+        // Counter animation for stats
+        gsap.utils.toArray('.stat-number').forEach((stat) => {
+            const target = stat.dataset.count;
+            const suffix = stat.textContent.replace(/[0-9.]/g, '');
+
+            gsap.from(stat, {
+                scrollTrigger: {
+                    trigger: stat,
+                    start: 'top 80%',
+                },
+                scale: 0.5,
+                opacity: 0,
+                duration: 1,
+                ease: 'back.out(1.7)',
+                onComplete: () => {
+                    gsap.to({}, {
+                        duration: 2,
+                        ease: 'power2.out',
+                        onUpdate: function () {
+                            const progress = this.progress();
+                            const current = (parseFloat(target) * progress).toFixed(target.includes('.') ? 1 : 0);
+                            stat.textContent = current + suffix;
+                        }
+                    });
+                }
+            });
+        });
+
+        // Section titles animation
+        gsap.utils.toArray('.section-title').forEach((title) => {
+            gsap.from(title, {
+                scrollTrigger: {
+                    trigger: title,
+                    start: 'top 85%',
+                },
+                y: 60,
+                opacity: 0,
+                duration: 1,
+                ease: 'power3.out',
+            });
+        });
+
+        // Line decoration animation
+        gsap.utils.toArray('.line-decoration').forEach((line) => {
+            gsap.from(line, {
+                scrollTrigger: {
+                    trigger: line,
+                    start: 'top 85%',
+                },
+                scaleX: 0,
+                duration: 0.8,
+                ease: 'power2.out',
+            });
+        });
+
+        // Button hover magnetic effect
+        document.querySelectorAll('.btn-primary').forEach(btn => {
+            btn.addEventListener('mousemove', (e) => {
+                const rect = btn.getBoundingClientRect();
+                const x = e.clientX - rect.left - rect.width / 2;
+                const y = e.clientY - rect.top - rect.height / 2;
+                btn.style.transform = `translateY(-4px) scale(1.02) translate(${x * 0.1}px, ${y * 0.1}px)`;
+            });
+
+            btn.addEventListener('mouseleave', () => {
+                btn.style.transform = '';
+            });
+        });
+
+        // Smooth scroll for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Parallax effect for floating elements
+        gsap.utils.toArray('.floating').forEach((el) => {
+            gsap.to(el, {
+                scrollTrigger: {
+                    trigger: el,
+                    start: 'top bottom',
+                    end: 'bottom top',
+                    scrub: 1,
+                },
+                y: -50,
+                ease: 'none',
+            });
+        });
+
+        // 3D card effect
+        document.querySelectorAll('.card-3d').forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const rotateX = (y - centerY) / 20;
+                const rotateY = (centerX - x) / 20;
+
+                card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.02)`;
+            });
+
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = '';
+            });
+        });
+
+        // ==========================================
+        // AUTHENTICATION SYSTEM
+        // ==========================================
+
+        // Initialize auth state on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAuthState();
+        });
+
+        function checkAuthState() {
+            const user = localStorage.getItem('cerebroband_user');
+            if (user) {
+                const userData = JSON.parse(user);
+                showLoggedInState(userData);
+            } else {
+                showLoggedOutState();
+            }
+        }
+
+        function showLoggedInState(userData) {
+            // Desktop
+            document.getElementById('auth-buttons').style.display = 'none';
+            document.getElementById('user-menu').style.display = 'block';
+            document.getElementById('user-avatar').textContent = userData.name.charAt(0).toUpperCase();
+            document.getElementById('user-name').textContent = userData.name;
+            document.getElementById('user-email').textContent = userData.email;
+
+            // Mobile
+            document.getElementById('mobile-auth-section').style.display = 'none';
+            document.getElementById('mobile-user-section').style.display = 'block';
+            document.getElementById('mobile-user-avatar').textContent = userData.name.charAt(0).toUpperCase();
+            document.getElementById('mobile-user-name').textContent = userData.name;
+            document.getElementById('mobile-user-email').textContent = userData.email;
+        }
+
+        function showLoggedOutState() {
+            // Desktop
+            document.getElementById('auth-buttons').style.display = 'flex';
+            document.getElementById('user-menu').style.display = 'none';
+
+            // Mobile
+            document.getElementById('mobile-auth-section').style.display = 'block';
+            document.getElementById('mobile-user-section').style.display = 'none';
+        }
+
+        // Modal functions
+        function openLoginModal() {
+            closeModals();
+            document.getElementById('login-modal').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function openSignupModal() {
+            closeModals();
+            document.getElementById('signup-modal').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModals() {
+            document.getElementById('login-modal').classList.remove('active');
+            document.getElementById('signup-modal').classList.remove('active');
+            document.body.style.overflow = '';
+            // Clear errors
+            document.getElementById('login-error').classList.remove('show');
+            document.getElementById('signup-error').classList.remove('show');
+            document.getElementById('signup-success').classList.remove('show');
+        }
+
+        function switchToSignup() {
+            document.getElementById('login-modal').classList.remove('active');
+            setTimeout(() => {
+                document.getElementById('signup-modal').classList.add('active');
+            }, 150);
+        }
+
+        function switchToLogin() {
+            document.getElementById('signup-modal').classList.remove('active');
+            setTimeout(() => {
+                document.getElementById('login-modal').classList.add('active');
+            }, 150);
+        }
+
+        // Close modal on overlay click
+        document.querySelectorAll('.auth-modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    closeModals();
+                }
+            });
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModals();
+            }
+        });
+
+        // Login form handler
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            const errorEl = document.getElementById('login-error');
+
+            // Check if user exists in localStorage
+            const users = JSON.parse(localStorage.getItem('cerebroband_users') || '[]');
+            const user = users.find(u => u.email === email);
+
+            if (!user) {
+                errorEl.textContent = 'No user found with this email';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (user.password !== password) {
+                errorEl.textContent = 'Incorrect password';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            // Login successful
+            localStorage.setItem('cerebroband_user', JSON.stringify({
+                name: user.name,
+                email: user.email
+            }));
+
+            closeModals();
+            checkAuthState();
+
+            // Show welcome animation
+            gsap.from('#user-avatar', {
+                scale: 0,
+                duration: 0.5,
+                ease: 'back.out(1.7)'
+            });
+        });
+
+        // Signup form handler
+        document.getElementById('signup-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = document.getElementById('signup-name').value;
+            const email = document.getElementById('signup-email').value;
+            const password = document.getElementById('signup-password').value;
+            const confirm = document.getElementById('signup-confirm').value;
+            const errorEl = document.getElementById('signup-error');
+            const successEl = document.getElementById('signup-success');
+
+            // Validation
+            if (password !== confirm) {
+                errorEl.textContent = 'Passwords do not match';
+                errorEl.classList.add('show');
+                successEl.classList.remove('show');
+                return;
+            }
+
+            if (password.length < 6) {
+                errorEl.textContent = 'Password must be at least 6 characters';
+                errorEl.classList.add('show');
+                successEl.classList.remove('show');
+                return;
+            }
+
+            // Check if user already exists
+            const users = JSON.parse(localStorage.getItem('cerebroband_users') || '[]');
+            if (users.find(u => u.email === email)) {
+                errorEl.textContent = 'A user with this email already exists';
+                errorEl.classList.add('show');
+                successEl.classList.remove('show');
+                return;
+            }
+
+            // Create new user
+            users.push({ name, email, password });
+            localStorage.setItem('cerebroband_users', JSON.stringify(users));
+
+            // Auto-login
+            localStorage.setItem('cerebroband_user', JSON.stringify({ name, email }));
+
+            errorEl.classList.remove('show');
+            successEl.textContent = 'Account created successfully!';
+            successEl.classList.add('show');
+
+            setTimeout(() => {
+                closeModals();
+                checkAuthState();
+
+                // Show welcome animation
+                gsap.from('#user-avatar', {
+                    scale: 0,
+                    duration: 0.5,
+                    ease: 'back.out(1.7)'
+                });
+            }, 1000);
+        });
+
+        // Logout function
+        function logout() {
+            localStorage.removeItem('cerebroband_user');
+            checkAuthState();
+
+            // Animate buttons appearing
+            gsap.from('#auth-buttons', {
+                opacity: 0,
+                x: 20,
+                duration: 0.4,
+                ease: 'power2.out'
+            });
+        }
+
+        // ==========================================
+        // BACKEND API SERVICE (Placeholder/Template)
+        // ==========================================
+
+        const HealthDataAPI = {
+            // API Configuration - Replace with real backend endpoints
+            baseURL: 'https://api.cerebroband.com/v1',
+
+            // Endpoint documentation for backend integration
+            endpoints: {
+                currentHeartRate: '/health/heart-rate/current',      // GET - Returns current HR
+                heartRateHistory: '/health/heart-rate/history',      // GET - Returns HR history (query: period=day|week|month)
+                strokeProbability: '/health/stroke-probability',      // GET - Returns stroke risk assessment
+                healthSummary: '/health/summary',                     // GET - Returns overall health summary
+                deviceStatus: '/device/status'                        // GET - Returns connected device status
+            },
+
+            // Headers template for authenticated requests
+            getHeaders() {
+                const token = localStorage.getItem('cerebroband_token');
+                return {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                };
+            },
+
+            // ===========================================
+            // REAL API CALLS (Implement when backend ready)
+            // ===========================================
+
+            async getCurrentHeartRate(userId) {
+                // TODO: Implement real API call
+                // const response = await fetch(`${this.baseURL}${this.endpoints.currentHeartRate}`, {
+                //   headers: this.getHeaders()
+                // });
+                // return response.json();
+
+                // Using mock data for now
+                return this.getMockCurrentHeartRate();
+            },
+
+            async getHeartRateHistory(userId, period = 'day') {
+                // TODO: Implement real API call
+                // const response = await fetch(`${this.baseURL}${this.endpoints.heartRateHistory}?period=${period}`, {
+                //   headers: this.getHeaders()
+                // });
+                // return response.json();
+
+                // Using mock data for now
+                return this.getMockHeartRateHistory(period);
+            },
+
+            async getStrokeProbability(userId) {
+                // TODO: Implement real API call
+                // const response = await fetch(`${this.baseURL}${this.endpoints.strokeProbability}`, {
+                //   headers: this.getHeaders()
+                // });
+                // return response.json();
+
+                // Using mock data for now
+                return this.getMockStrokeProbability();
+            },
+
+            async getDailyPulse(userId) {
+                // TODO: Implement real API call
+                // const response = await fetch(`${this.baseURL}/health/daily-pulse`, {
+                //   headers: this.getHeaders()
+                // });
+                // return response.json();
+
+                // Using mock data for now
+                return this.getMockDailyPulse();
+            },
+
+            // ===========================================
+            // MOCK DATA GENERATORS (For frontend development)
+            // ===========================================
+
+            getMockCurrentHeartRate() {
+                const baseRate = 72;
+                const variation = Math.floor(Math.random() * 15) - 7;
+                const heartRate = baseRate + variation;
+
+                let status = 'normal';
+                if (heartRate > 100) status = 'high';
+                else if (heartRate > 85) status = 'elevated';
+
+                return {
+                    value: heartRate,
+                    status: status,
+                    timestamp: new Date().toISOString()
+                };
+            },
+
+            getMockHeartRateHistory(period) {
+                const data = {
+                    labels: [],
+                    values: [],
+                    stats: { min: 999, max: 0, avg: 0 }
+                };
+
+                let points, labelFormat;
+                const now = new Date();
+
+                switch (period) {
+                    case 'day':
+                        points = 24;
+                        for (let i = 23; i >= 0; i--) {
+                            const hour = new Date(now - i * 3600000);
+                            data.labels.push(hour.getHours() + ':00');
+                        }
+                        break;
+                    case 'week':
+                        points = 7;
+                        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                        for (let i = 6; i >= 0; i--) {
+                            const day = new Date(now - i * 86400000);
+                            data.labels.push(days[day.getDay()]);
+                        }
+                        break;
+                    case 'month':
+                        points = 30;
+                        for (let i = 29; i >= 0; i--) {
+                            const day = new Date(now - i * 86400000);
+                            data.labels.push((day.getMonth() + 1) + '/' + day.getDate());
+                        }
+                        break;
+                }
+
+                let total = 0;
+                for (let i = 0; i < points; i++) {
+                    const value = 65 + Math.floor(Math.random() * 30);
+                    data.values.push(value);
+                    data.stats.min = Math.min(data.stats.min, value);
+                    data.stats.max = Math.max(data.stats.max, value);
+                    total += value;
+                }
+                data.stats.avg = Math.round(total / points);
+
+                return data;
+            },
+
+            getMockCVDRisk() {
+                // Simulated CVD risk based on mock health data
+                const probability = Math.floor(Math.random() * 25) + 5; // 5-30%
+
+                let riskLevel = 'low';
+                let color = '#22c55e';
+                if (probability > 50) {
+                    riskLevel = 'high';
+                    color = '#ef4444';
+                } else if (probability > 25) {
+                    riskLevel = 'moderate';
+                    color = '#fbbf24';
+                }
+
+                return {
+                    probability: probability,
+                    riskLevel: riskLevel,
+                    color: color,
+                    factors: [
+                        { name: 'Heart Rate Variability', impact: 'low' },
+                        { name: 'Blood Pressure Estimate', impact: 'normal' },
+                        { name: 'Activity Level', impact: 'good' }
+                    ]
+                };
+            },
+
+            getMockDailyPulse() {
+                const now = new Date();
+                const data = {
+                    date: now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+                    labels: [],
+                    values: [],
+                    stats: { min: 999, max: 0, avg: 0 }
+                };
+
+                // Generate hourly data for today (from midnight to current hour)
+                const currentHour = now.getHours();
+                let total = 0;
+                let count = 0;
+
+                for (let i = 0; i <= currentHour; i++) {
+                    const hour = i.toString().padStart(2, '0') + ':00';
+                    data.labels.push(hour);
+
+                    // Generate realistic heart rate variation through the day
+                    let baseRate;
+                    if (i >= 0 && i < 6) {
+                        // Sleeping hours - lower HR
+                        baseRate = 55 + Math.floor(Math.random() * 10);
+                    } else if (i >= 6 && i < 9) {
+                        // Wake up hours
+                        baseRate = 65 + Math.floor(Math.random() * 15);
+                    } else if (i >= 9 && i < 12) {
+                        // Morning activity
+                        baseRate = 70 + Math.floor(Math.random() * 20);
+                    } else if (i >= 12 && i < 14) {
+                        // Lunch time
+                        baseRate = 75 + Math.floor(Math.random() * 15);
+                    } else if (i >= 14 && i < 18) {
+                        // Afternoon
+                        baseRate = 68 + Math.floor(Math.random() * 18);
+                    } else if (i >= 18 && i < 21) {
+                        // Evening
+                        baseRate = 65 + Math.floor(Math.random() * 15);
+                    } else {
+                        // Night
+                        baseRate = 60 + Math.floor(Math.random() * 12);
+                    }
+
+                    data.values.push(baseRate);
+                    data.stats.min = Math.min(data.stats.min, baseRate);
+                    data.stats.max = Math.max(data.stats.max, baseRate);
+                    total += baseRate;
+                    count++;
+                }
+
+                data.stats.avg = count > 0 ? Math.round(total / count) : 0;
+                if (data.stats.min === 999) data.stats.min = 0;
+
+                return data;
+            }
+        };
+
+        const FIREBASE_URL = 'https://archoai-default-rtdb.firebaseio.com';
+        let cachedGeminiData = null;
+        let cachedCrackData = null;
+        let dataUpdateInterval = null;
+
+        // ArchoAI Dashboard Functions
+        function openDashboard() {
+            // Direct access without login
+            showDashboard();
+        }
+
+        async function showDashboard() {
+            // Show dashboard
+            document.getElementById('dashboard-overlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+
+            // Fetch and display ArchoAI data
+            await fetchArchoAIData();
+
+            // Start auto-update interval
+            if (dataUpdateInterval) clearInterval(dataUpdateInterval);
+            dataUpdateInterval = setInterval(fetchArchoAIData, 10000);
+
+            // Animate dashboard cards
+            gsap.from('.dashboard-card', {
+                y: 40,
+                opacity: 0,
+                duration: 0.6,
+                stagger: 0.1,
+                ease: 'power3.out',
+                delay: 0.2
+            });
+        }
+
+        function closeDashboard() {
+            document.getElementById('dashboard-overlay').classList.remove('active');
+            document.body.style.overflow = '';
+
+            // Clear intervals
+            if (dataUpdateInterval) {
+                clearInterval(dataUpdateInterval);
+                dataUpdateInterval = null;
+            }
+        }
+
+        function closeDashboardOnOverlay(event) {
+            if (event.target.id === 'dashboard-overlay') {
+                closeDashboard();
+            }
+        }
+
+        async function fetchArchoAIData() {
+            try {
+                // Fetch our real-time groq+deepcrack analysis
+                const response = await fetch(FIREBASE_URL + '/analysis.json?_=' + new Date().getTime(), {
+                    cache: 'no-store',
+                    headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
+                });
+                const data = await response.json();
+
+                if (data) {
+                    const keys = Object.keys(data);
+                    if (keys.length > 0) {
+                         const historyList = keys.map(k => ({id: k, ...data[k]})).sort((a,b) => (b.last_updated || 0) - (a.last_updated || 0));
+                         const latest = historyList[0];
+                         
+                         if (latest.ai_analysis) {
+                              cachedGeminiData = {
+                                  artifact_type: latest.ai_analysis.artifact_type,
+                                  material: latest.ai_analysis.material,
+                                  estimated_era: latest.ai_analysis.era,
+                                  purpose: latest.ai_analysis.purpose,
+                                  condition_assessment: latest.ai_analysis.condition
+                              };
+                         }
+                         if (latest.crack_detection) {
+                              cachedCrackData = {
+                                  cracks_detected: latest.crack_detection.crack_percentage > 0,
+                                  damage_percentage: latest.crack_detection.crack_percentage,
+                                  crack_pixels: latest.crack_detection.crack_pixels,
+                                  total_pixels: latest.crack_detection.total_pixels
+                              };
+                         }
+                         if (latest.last_updated) {
+                              const date = new Date(latest.last_updated);
+                              if (document.getElementById('last-updated-time')) {
+                                  document.getElementById('last-updated-time').textContent = date.toLocaleTimeString('ru-RU');
+                              }
+                         }
+
+                         const container = document.getElementById('history-container');
+                         if (container) {
+                             container.innerHTML = '';
+                             historyList.forEach(item => {
+                                 const itemDate = new Date(item.last_updated || Date.now()).toLocaleString('ru-RU');
+                                 const aType = item.ai_analysis?.artifact_type || 'Неизвестно';
+                                 const cPct = item.crack_detection?.crack_percentage || 0;
+                                 const riskLevel = item.crack_detection?.risk_level || '--';
+                                 
+                                 const bg = cPct > 5 ? 'rgba(239, 68, 68, 0.1)' : cPct > 1 ? 'rgba(251, 191, 36, 0.1)' : 'rgba(34, 197, 94, 0.1)';
+                                 const border = cPct > 5 ? '#ef4444' : cPct > 1 ? '#fbbf24' : '#22c55e';
+                                 
+                                 const div = document.createElement('div');
+                                 div.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; margin-bottom: 10px; background: ${bg}; border-left: 3px solid ${border}; border-radius: 12px;`;
+                                 div.innerHTML = `
+                                     <div style="display: flex; flex-direction: column; gap: 4px;">
+                                         <div style="font-weight: 600; font-size: 15px;">${aType}</div>
+                                         <div style="font-size: 12px; opacity: 0.6;">${itemDate}</div>
+                                     </div>
+                                     <div style="text-align: right;">
+                                         <div style="font-weight: bold; color: ${border}">${cPct.toFixed(1)}%</div>
+                                         <div style="font-size: 11px; opacity: 0.7;">${riskLevel}</div>
+                                     </div>
+                                 `;
+                                 container.appendChild(div);
+                             });
+                         }
+                    }
+                }
+
+                // Update dashboard UI
+                updateArchoAIDashboard();
+
+            } catch (error) {
+                console.error('Firebase fetch error:', error);
+            }
+        }
+
+        function updateArchoAIDashboard() {
+            // Update Gemini Analysis card
+            const artifactTypeEl = document.getElementById('gemini-artifact-type');
+            const materialEl = document.getElementById('gemini-material');
+            const eraEl = document.getElementById('gemini-era');
+            const purposeEl = document.getElementById('gemini-purpose');
+            const conditionEl = document.getElementById('gemini-condition');
+
+            if (cachedGeminiData) {
+                if (artifactTypeEl) artifactTypeEl.textContent = cachedGeminiData.artifact_type || '--';
+                if (materialEl) materialEl.textContent = cachedGeminiData.material || '--';
+                if (eraEl) eraEl.textContent = cachedGeminiData.estimated_era || '--';
+                if (purposeEl) purposeEl.textContent = cachedGeminiData.purpose || '--';
+                if (conditionEl) conditionEl.textContent = cachedGeminiData.condition_assessment || '--';
+            }
+
+            // Update Crack Detection card
+            const crackPercentEl = document.getElementById('crack-percentage');
+            const crackResultEl = document.getElementById('crack-result');
+            const crackPixelsEl = document.getElementById('crack-pixels');
+            const totalPixelsEl = document.getElementById('total-pixels');
+            const crackGaugeEl = document.getElementById('crack-gauge-fill');
+
+            if (cachedCrackData) {
+                const cracksDetected = cachedCrackData.cracks_detected || false;
+                const damagePercent = cachedCrackData.damage_percentage || 0;
+                const crackPixels = cachedCrackData.crack_pixels || 0;
+                const totalPixels = cachedCrackData.total_pixels || 0;
+
+                if (crackPercentEl) crackPercentEl.textContent = damagePercent.toFixed(1) + '%';
+                if (crackPixelsEl) crackPixelsEl.textContent = crackPixels.toLocaleString();
+                if (totalPixelsEl) totalPixelsEl.textContent = totalPixels.toLocaleString();
+
+                if (crackResultEl) {
+                    crackResultEl.textContent = cracksDetected ? 'Трещины обнаружены' : 'Нет трещин';
+                    crackResultEl.style.background = cracksDetected
+                        ? 'linear-gradient(90deg, rgba(239, 68, 68, 0.2), rgba(248, 113, 113, 0.2))'
+                        : 'linear-gradient(90deg, rgba(34, 197, 94, 0.2), rgba(74, 222, 128, 0.2))';
+                    crackResultEl.style.color = cracksDetected ? '#f87171' : '#4ade80';
+                }
+
+                // Update gauge
+                if (crackGaugeEl) {
+                    const percent = Math.min(damagePercent, 100);
+                    crackGaugeEl.style.background = `conic-gradient(${cracksDetected ? '#ef4444' : '#22c55e'} 0deg, ${cracksDetected ? '#ef4444' : '#22c55e'} ${percent * 3.6}deg, rgba(255,255,255,0.1) ${percent * 3.6}deg)`;
+                }
+            }
+        }
+
+        async function updateCurrentHeartRate() {
+            const data = cachedFirebaseData;
+
+            if (!data || !data.heartRate) {
+                document.getElementById('current-heart-rate').textContent = '--';
+                document.getElementById('heart-rate-status').innerHTML = '<span>●</span> No data available';
+                return;
+            }
+
+            const heartRate = parseInt(data.heartRate);
+            const valueEl = document.getElementById('current-heart-rate');
+            const statusEl = document.getElementById('heart-rate-status');
+
+            // Animate the value change
+            gsap.to(valueEl, {
+                textContent: heartRate,
+                duration: 0.5,
+                snap: { textContent: 1 },
+                ease: 'power2.out'
+            });
+
+            // Update status based on heart rate
+            statusEl.className = 'heart-rate-status';
+            if (heartRate > 100) {
+                statusEl.classList.add('status-high');
+                statusEl.innerHTML = '<span>●</span> High - Please Rest';
+            } else if (heartRate > 85) {
+                statusEl.classList.add('status-elevated');
+                statusEl.innerHTML = '<span>●</span> Slightly Elevated';
+            } else if (heartRate < 50) {
+                statusEl.classList.add('status-low');
+                statusEl.innerHTML = '<span>●</span> Low - Monitor closely';
+            } else {
+                statusEl.classList.add('status-normal');
+                statusEl.innerHTML = '<span>●</span> Normal Range';
+            }
+        }
+
+        function updateSpO2() {
+            const data = cachedFirebaseData;
+
+            const valueEl = document.getElementById('current-spo2');
+            const statusEl = document.getElementById('spo2-status');
+
+            if (!data || data.spo2 === undefined) {
+                valueEl.textContent = '--';
+                statusEl.className = 'spo2-status status-normal';
+                statusEl.innerHTML = '<span>●</span> No data available';
+                return;
+            }
+
+            const spo2 = parseInt(data.spo2);
+
+            // Animate the value change
+            gsap.to(valueEl, {
+                textContent: spo2,
+                duration: 0.5,
+                snap: { textContent: 1 },
+                ease: 'power2.out'
+            });
+
+            // Update status based on SpO2 level
+            statusEl.className = 'spo2-status';
+            if (spo2 >= 95) {
+                statusEl.classList.add('status-normal');
+                statusEl.innerHTML = '<span>●</span> Normal Range';
+            } else if (spo2 >= 90) {
+                statusEl.classList.add('status-low');
+                statusEl.innerHTML = '<span>●</span> Low - Monitor closely';
+            } else {
+                statusEl.classList.add('status-critical');
+                statusEl.innerHTML = '<span>●</span> Critical - Seek help';
+            }
+        }
+
+        function initializeCharts() {
+            // Destroy existing charts if any
+            if (heartRateChart) heartRateChart.destroy();
+            if (spo2Chart) spo2Chart.destroy();
+            if (heartRateWeekChart) heartRateWeekChart.destroy();
+            if (spo2WeekChart) spo2WeekChart.destroy();
+            if (heartRateMonthChart) heartRateMonthChart.destroy();
+            if (spo2MonthChart) spo2MonthChart.destroy();
+
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 500,
+                    easing: 'easeInOutQuart'
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(30, 30, 50, 0.9)',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        borderColor: 'rgba(255, 255, 255, 0.1)',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: false
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
+                        ticks: { color: 'rgba(255, 255, 255, 0.5)', font: { size: 10 }, maxRotation: 45 }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
+                        ticks: { color: 'rgba(255, 255, 255, 0.5)', font: { size: 10 } }
+                    }
+                },
+                elements: {
+                    point: { radius: 4, hoverRadius: 6 },
+                    line: { tension: 0.4 }
+                }
+            };
+
+            // Generate hour labels from 8:00 to 20:00
+            const hourLabels = [];
+            for (let h = HOUR_START; h <= HOUR_END; h++) {
+                hourLabels.push(h.toString().padStart(2, '0') + ':00');
+            }
+
+            // Generate day labels for week
+            const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+            // Generate week labels for month (Week 1, Week 2, etc.)
+            const weekLabels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+
+            // Daily Heart Rate Chart (8:00 - 20:00)
+            const hrCtx = document.getElementById('heartRateChart').getContext('2d');
+            heartRateChart = new Chart(hrCtx, {
+                type: 'line',
+                data: {
+                    labels: hourLabels,
+                    datasets: [{
+                        label: 'Heart Rate (BPM)',
+                        data: new Array(hourLabels.length).fill(null),
+                        borderColor: '#f87171',
+                        backgroundColor: 'rgba(248, 113, 113, 0.1)',
+                        fill: true,
+                        borderWidth: 3,
+                        pointBackgroundColor: '#f87171',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        spanGaps: true
+                    }]
+                },
+                options: { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, min: 40, max: 140 } } }
+            });
+
+            // Daily SpO2 Chart (8:00 - 20:00)
+            const spo2Ctx = document.getElementById('spo2Chart').getContext('2d');
+            spo2Chart = new Chart(spo2Ctx, {
+                type: 'line',
+                data: {
+                    labels: hourLabels,
+                    datasets: [{
+                        label: 'SpO2 (%)',
+                        data: new Array(hourLabels.length).fill(null),
+                        borderColor: '#60a5fa',
+                        backgroundColor: 'rgba(96, 165, 250, 0.1)',
+                        fill: true,
+                        borderWidth: 3,
+                        pointBackgroundColor: '#60a5fa',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        spanGaps: true
+                    }]
+                },
+                options: { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, min: 85, max: 100 } } }
+            });
+
+            // Weekly Heart Rate Chart
+            const hrWeekCtx = document.getElementById('heartRateWeekChart').getContext('2d');
+            heartRateWeekChart = new Chart(hrWeekCtx, {
+                type: 'bar',
+                data: {
+                    labels: dayLabels,
+                    datasets: [{
+                        label: 'Avg Heart Rate (BPM)',
+                        data: new Array(7).fill(null),
+                        backgroundColor: 'rgba(248, 113, 113, 0.6)',
+                        borderColor: '#f87171',
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, min: 40, max: 140 } } }
+            });
+
+            // Weekly SpO2 Chart
+            const spo2WeekCtx = document.getElementById('spo2WeekChart').getContext('2d');
+            spo2WeekChart = new Chart(spo2WeekCtx, {
+                type: 'bar',
+                data: {
+                    labels: dayLabels,
+                    datasets: [{
+                        label: 'Avg SpO2 (%)',
+                        data: new Array(7).fill(null),
+                        backgroundColor: 'rgba(96, 165, 250, 0.6)',
+                        borderColor: '#60a5fa',
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, min: 85, max: 100 } } }
+            });
+
+            // Monthly Heart Rate Chart
+            const hrMonthCtx = document.getElementById('heartRateMonthChart').getContext('2d');
+            heartRateMonthChart = new Chart(hrMonthCtx, {
+                type: 'bar',
+                data: {
+                    labels: weekLabels,
+                    datasets: [{
+                        label: 'Avg Heart Rate (BPM)',
+                        data: new Array(4).fill(null),
+                        backgroundColor: 'rgba(248, 113, 113, 0.6)',
+                        borderColor: '#f87171',
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, min: 40, max: 140 } } }
+            });
+
+            // Monthly SpO2 Chart
+            const spo2MonthCtx = document.getElementById('spo2MonthChart').getContext('2d');
+            spo2MonthChart = new Chart(spo2MonthCtx, {
+                type: 'bar',
+                data: {
+                    labels: weekLabels,
+                    datasets: [{
+                        label: 'Avg SpO2 (%)',
+                        data: new Array(4).fill(null),
+                        backgroundColor: 'rgba(96, 165, 250, 0.6)',
+                        borderColor: '#60a5fa',
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, min: 85, max: 100 } } }
+            });
+        }
+
+        function updateCharts() {
+            const data = cachedFirebaseData;
+            if (!data) return;
+
+            const now = new Date();
+            const currentHour = now.getHours();
+            const hourLabel = currentHour.toString().padStart(2, '0') + ':00';
+
+            // Get day of week (0 = Sunday, adjust to Monday = 0)
+            let dayOfWeek = now.getDay() - 1;
+            if (dayOfWeek < 0) dayOfWeek = 6; // Sunday becomes 6
+
+            // Get week of month (0-3)
+            const weekOfMonth = Math.floor((now.getDate() - 1) / 7);
+
+            // Only update if within 8:00 - 20:00 range
+            const isInTimeRange = currentHour >= HOUR_START && currentHour <= HOUR_END;
+
+            // Update Heart Rate charts
+            if (data.heartRate !== undefined) {
+                const hr = parseInt(data.heartRate);
+
+                // Daily chart (8:00 - 20:00)
+                if (isInTimeRange) {
+                    const hourIndex = currentHour - HOUR_START;
+                    heartRateChart.data.datasets[0].data[hourIndex] = hr;
+                    heartRateChart.update('none');
+                }
+
+                // Weekly chart - store average for the day
+                if (!heartRateWeekHistory[dayOfWeek]) {
+                    heartRateWeekHistory[dayOfWeek] = { sum: 0, count: 0 };
+                }
+                heartRateWeekHistory[dayOfWeek].sum += hr;
+                heartRateWeekHistory[dayOfWeek].count++;
+                const weekAvg = Math.round(heartRateWeekHistory[dayOfWeek].sum / heartRateWeekHistory[dayOfWeek].count);
+                heartRateWeekChart.data.datasets[0].data[dayOfWeek] = weekAvg;
+                heartRateWeekChart.update('none');
+
+                // Monthly chart - store average for the week
+                if (!heartRateMonthHistory[weekOfMonth]) {
+                    heartRateMonthHistory[weekOfMonth] = { sum: 0, count: 0 };
+                }
+                heartRateMonthHistory[weekOfMonth].sum += hr;
+                heartRateMonthHistory[weekOfMonth].count++;
+                const monthAvg = Math.round(heartRateMonthHistory[weekOfMonth].sum / heartRateMonthHistory[weekOfMonth].count);
+                heartRateMonthChart.data.datasets[0].data[weekOfMonth] = monthAvg;
+                heartRateMonthChart.update('none');
+            }
+
+            // Update SpO2 charts
+            if (data.spo2 !== undefined) {
+                const spo2 = parseInt(data.spo2);
+
+                // Daily chart (8:00 - 20:00)
+                if (isInTimeRange) {
+                    const hourIndex = currentHour - HOUR_START;
+                    spo2Chart.data.datasets[0].data[hourIndex] = spo2;
+                    spo2Chart.update('none');
+                }
+
+                // Weekly chart - store average for the day
+                if (!spo2WeekHistory[dayOfWeek]) {
+                    spo2WeekHistory[dayOfWeek] = { sum: 0, count: 0 };
+                }
+                spo2WeekHistory[dayOfWeek].sum += spo2;
+                spo2WeekHistory[dayOfWeek].count++;
+                const weekAvg = Math.round(spo2WeekHistory[dayOfWeek].sum / spo2WeekHistory[dayOfWeek].count);
+                spo2WeekChart.data.datasets[0].data[dayOfWeek] = weekAvg;
+                spo2WeekChart.update('none');
+
+                // Monthly chart - store average for the week
+                if (!spo2MonthHistory[weekOfMonth]) {
+                    spo2MonthHistory[weekOfMonth] = { sum: 0, count: 0 };
+                }
+                spo2MonthHistory[weekOfMonth].sum += spo2;
+                spo2MonthHistory[weekOfMonth].count++;
+                const monthAvg = Math.round(spo2MonthHistory[weekOfMonth].sum / spo2MonthHistory[weekOfMonth].count);
+                spo2MonthChart.data.datasets[0].data[weekOfMonth] = monthAvg;
+                spo2MonthChart.update('none');
+            }
+        }
+
+        function updateCVDRisk() {
+            const data = cachedFirebaseData;
+
+            const valueEl = document.getElementById('cvd-value');
+            const fillEl = document.getElementById('cvd-gauge-fill');
+            const levelEl = document.getElementById('cvd-risk-level');
+
+            if (!data || !data.heartRate) {
+                valueEl.textContent = '--%';
+                levelEl.textContent = 'No data';
+                levelEl.className = 'cvd-risk-level';
+                fillEl.style.background = 'transparent';
+                return;
+            }
+
+            const heartRate = parseInt(data.heartRate);
+
+            // Calculate CVD risk based on heart rate
+            // This is a simplified algorithm for demonstration
+            // Normal HR: 60-100 BPM = Low risk (5-15%)
+            // Elevated HR: 100-120 BPM = Moderate risk (20-40%)
+            // High HR: >120 BPM = High risk (45-70%)
+            // Low HR: <50 BPM = Elevated risk (25-40%)
+            // Very low HR: <40 BPM = High risk (50-65%)
+
+            let probability;
+            let riskLevel;
+            let color;
+
+            if (heartRate >= 60 && heartRate <= 100) {
+                // Normal range - low risk
+                probability = 5 + Math.round((heartRate - 60) * 0.25);
+                riskLevel = 'low';
+                color = '#22c55e'; // Green
+            } else if (heartRate > 100 && heartRate <= 120) {
+                // Elevated - moderate risk
+                probability = 20 + Math.round((heartRate - 100) * 1);
+                riskLevel = 'moderate';
+                color = '#f59e0b'; // Amber
+            } else if (heartRate > 120) {
+                // High - high risk
+                probability = Math.min(70, 45 + Math.round((heartRate - 120) * 0.8));
+                riskLevel = 'high';
+                color = '#ef4444'; // Red
+            } else if (heartRate >= 50 && heartRate < 60) {
+                // Slightly low - low to moderate risk
+                probability = 15 + Math.round((60 - heartRate) * 1.5);
+                riskLevel = heartRate < 55 ? 'moderate' : 'low';
+                color = riskLevel === 'moderate' ? '#f59e0b' : '#22c55e';
+            } else if (heartRate >= 40 && heartRate < 50) {
+                // Low - moderate risk
+                probability = 25 + Math.round((50 - heartRate) * 1.5);
+                riskLevel = 'moderate';
+                color = '#f59e0b';
+            } else {
+                // Very low (<40) - high risk
+                probability = Math.min(65, 50 + Math.round((40 - heartRate) * 1.5));
+                riskLevel = 'high';
+                color = '#ef4444';
+            }
+
+            // Update value
+            valueEl.textContent = probability + '%';
+
+            // Update gauge fill (360 degrees = 100%)
+            const angle = (probability / 100) * 360;
+            fillEl.style.background = `conic-gradient(${color} 0deg, ${color} ${angle}deg, transparent ${angle}deg)`;
+
+            // Update risk level text
+            levelEl.className = 'cvd-risk-level';
+            if (riskLevel === 'high') {
+                levelEl.classList.add('risk-high');
+                levelEl.textContent = 'High Risk';
+            } else if (riskLevel === 'moderate') {
+                levelEl.classList.add('risk-moderate');
+                levelEl.textContent = 'Moderate Risk';
+            } else {
+                levelEl.classList.add('risk-low');
+                levelEl.textContent = 'Low Risk';
+            }
+        }
+
+        function updateLastUpdatedTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            document.getElementById('last-updated-time').textContent = timeStr;
+        }
+
+        // Clear saved device ID on logout
+        const originalLogout = logout;
+        logout = function () {
+            localStorage.removeItem('cerebroband_device_id');
+            authenticatedDeviceId = null;
+            originalLogout();
+        };
+
+        // Close dashboard and device auth modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const dashboardOverlay = document.getElementById('dashboard-overlay');
+                const deviceAuthModal = document.getElementById('device-auth-modal');
+
+                if (dashboardOverlay.classList.contains('active')) {
+                    closeDashboard();
+                }
+                if (deviceAuthModal.classList.contains('active')) {
+                    closeDeviceAuthModal();
+                }
+            }
+        });
+
+        function openSettings() {
+            alert('Settings will be available in the next update!');
+        }
+
+
+    </script>
+</body>
+
+</html>

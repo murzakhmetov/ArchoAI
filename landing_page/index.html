@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ArchoAI · Искусственный интеллект для археологии</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a href="#" class="brand">
+        <span class="brand-mark">A</span>
+        <span>ArchoAI</span>
+      </a>
+      <div class="nav-links">
+        <a href="#about">О проекте</a>
+        <a href="#hardware">Железо</a>
+        <a href="#app">Приложение</a>
+        <a href="#pricing">Цена</a>
+      </div>
+      <a href="#contact" class="btn-pill">Связаться</a>
+    </div>
+  </nav>
+
+  <main>
+    <!-- HERO -->
+    <section class="container hero">
+      <div class="hero-content">
+        <span class="badge">ArchoAI · v1.0</span>
+        <h1>Археология <em>будущего</em> из Казахстана.</h1>
+      </div>
+      <div class="hero-right">
+        <p>Искусственный интеллект для автоматической классификации археологических находок. Открытый стек, доступное железо, понятный AI для науки и образования.</p>
+        <div class="hero-tags">
+          <span class="caption">CV · Компьютерное зрение</span> | 
+          <span class="caption">Edge-AI</span> | 
+          <span class="caption">Raspberry Pi 5</span>
+        </div>
+        <div class="hero-cta-group">
+          <a href="#pricing" class="btn-pill">Заказать комплект</a>
+          <a href="#app" class="btn-outline">Посмотреть приложение →</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS -->
+    <section class="container">
+      <div class="stats-grid">
+        <div class="stat-item">
+          <h3>20.2°C</h3>
+          <p>Оптимальный микроклимат</p>
+        </div>
+        <div class="stat-item">
+          <h3>3.1</h3>
+          <p>Gemini-движок (Flash-Lite)</p>
+        </div>
+        <div class="stat-item">
+          <h3>65%+</h3>
+          <p>Точность распознавания</p>
+        </div>
+        <div class="stat-item">
+          <h3>100К₸</h3>
+          <p>Стартовая цена комплекта</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ABOUT -->
+    <section id="about" class="container">
+      <div class="flex-split">
+        <div>
+          <span class="caption">О проекте</span>
+          <h2>Археология переосмыслена через компьютерное зрение.</h2>
+          <p class="text-body" style="margin-top: 24px;">ArchoAI объединяет археологию и современные технологии, позволяя по-новому подходить к изучению прошлого — от музейных коллекций до полевых раскопок.</p>
+        </div>
+        <div class="grid-3" style="grid-template-columns: 1fr;">
+          <div class="card-white" style="margin-bottom: 20px;">
+            <span class="caption" style="color: var(--color-obsidian);">01</span>
+            <h3 style="font-size: 20px; margin-top: 8px;">Современные технологии</h3>
+            <p class="text-muted">Полевые данные, музейные коллекции и научные публикации — в одной экосистеме.</p>
+          </div>
+          <div class="card-white">
+            <span class="caption" style="color: var(--color-obsidian);">02</span>
+            <h3 style="font-size: 20px; margin-top: 8px;">Искусственный интеллект</h3>
+            <p class="text-muted">Нейросеть работает локально — без облака, без задержек. Raspberry Pi 5 + USB-камера делают систему доступной.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CASE STUDY -->
+    <section class="container">
+      <div class="card-obsidian">
+        <div class="flex-split" style="gap: 40px;">
+          <div>
+            <span class="caption" style="color: var(--color-ash);">Кейс · Полевой лагерь live</span>
+            <h2 style="color: white; margin-top: 12px;">248 находок за смену</h2>
+            <p style="color: var(--color-ash); margin-top: 16px;">Среднее время анализа: <strong>3.4с</strong></p>
+            <div style="margin-top: 32px; display: flex; flex-wrap: wrap; gap: 8px;">
+               <span class="card-fog" style="background: rgba(255,255,255,0.1); padding: 4px 12px; font-size: 12px; border-radius: 8px;">Pottery</span>
+               <span class="card-fog" style="background: rgba(255,255,255,0.1); padding: 4px 12px; font-size: 12px; border-radius: 8px;">Bone</span>
+               <span class="card-fog" style="background: rgba(255,255,255,0.1); padding: 4px 12px; font-size: 12px; border-radius: 8px;">Stone</span>
+            </div>
+          </div>
+          <div class="card-white" style="color: var(--color-obsidian);">
+            <span class="caption">Region · Южный Казахстан sync</span>
+            <ul style="list-style: none; margin-top: 20px;">
+              <li style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--color-mist);"><span>Отрар</span> <strong>84</strong></li>
+              <li style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--color-mist);"><span>Туркестан</span> <strong>62</strong></li>
+              <li style="display: flex; justify-content: space-between; padding: 8px 0;"><span>Сайрам</span> <strong>41</strong></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HARDWARE -->
+    <section id="hardware" class="container">
+      <div style="text-align: center; margin-bottom: 64px;">
+        <span class="caption">Аппаратная часть</span>
+        <h2>Полный стек от железа до модели.</h2>
+        <p class="text-muted" style="max-width: 600px; margin: 16px auto;">Готовый комплект: компактное железо, защищённый корпус и весь необходимый софт для запуска системы за один день.</p>
+      </div>
+      <div class="grid-3">
+        <div class="card-white hw-card">
+          <div>
+            <span class="hw-tag">CPU · 4-core</span>
+            <h3 style="font-size: 20px;">Raspberry Pi 5</h3>
+            <p class="text-muted">Центральный вычислительный модуль системы в реальном времени.</p>
+          </div>
+        </div>
+        <div class="card-white hw-card">
+          <div>
+            <span class="hw-tag">12 MP</span>
+            <h3 style="font-size: 20px;">Камера USB</h3>
+            <p class="text-muted">Используется для точной фотофиксации и различения мелких деталей.</p>
+          </div>
+        </div>
+        <div class="card-white hw-card">
+          <div>
+            <span class="hw-tag">Field-ready</span>
+            <h3 style="font-size: 20px;">Портативное питание</h3>
+            <p class="text-muted">Обеспечивает автономную работу системы полный рабочий день.</p>
+          </div>
+        </div>
+        <div class="card-white hw-card">
+          <div>
+            <span class="hw-tag">IP54</span>
+            <h3 style="font-size: 20px;">Защитный корпус</h3>
+            <p class="text-muted">Защищает от пыли, влаги и повреждений при работе на раскопках.</p>
+          </div>
+        </div>
+        <div class="card-white hw-card">
+          <div>
+            <span class="hw-tag">ML</span>
+            <h3 style="font-size: 20px;">Python + PyTorch</h3>
+            <p class="text-muted">Фреймворк глубокого обучения для создания нейронных сетей.</p>
+          </div>
+        </div>
+        <div class="card-white hw-card">
+          <div>
+            <span class="hw-tag">Vision</span>
+            <h3 style="font-size: 20px;">OpenCV</h3>
+            <p class="text-muted">Библиотека компьютерного зрения для анализа изображений.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- APP -->
+    <section id="app" class="container">
+      <div style="margin-bottom: 64px;">
+        <span class="caption">Приложение</span>
+        <h2>Умный ассистент археолога в кармане.</h2>
+        <p class="text-muted" style="max-width: 600px; margin-top: 16px;">Мобильное приложение ArchoAI получает данные с устройства, ведёт каталог находок и мониторит микроклимат.</p>
+      </div>
+      
+      <div class="app-gallery">
+        <!-- 1. Dashboard -->
+        <div class="phone-card">
+          <img src="images/acrho1.jpeg" alt="Dashboard">
+          <div class="phone-info">
+            <span class="caption" style="color: var(--color-ash);">Дашборд</span>
+            <p>Микроклимат в реальном времени</p>
+          </div>
+        </div>
+        <!-- 2. Humidity/Trends -->
+        <div class="phone-card">
+          <img src="images/archo2.jpeg" alt="Trends">
+          <div class="phone-info">
+            <span class="caption" style="color: var(--color-ash);">Тренды</span>
+            <p>24-часовой тренд и зона сохранности</p>
+          </div>
+        </div>
+        <!-- 3. AI Analysis -->
+        <div class="phone-card">
+          <img src="images/archo3.jpeg" alt="AI Analysis">
+          <div class="phone-info">
+            <span class="caption" style="color: var(--color-ash);">Аналитика</span>
+            <p>Динамический отчёт ИИ</p>
+          </div>
+        </div>
+        <!-- 4. Artifacts -->
+        <div class="phone-card">
+          <img src="images/archo4.jpeg" alt="Artifacts">
+          <div class="phone-info">
+            <span class="caption" style="color: var(--color-ash);">Артефакты</span>
+            <p>AI-классификация находок</p>
+          </div>
+        </div>
+        <!-- 5. Chat -->
+        <div class="phone-card">
+          <img src="images/archo5.jpeg" alt="Chat">
+          <div class="phone-info">
+            <span class="caption" style="color: var(--color-ash);">ИИ-Эксперт</span>
+            <p>Чат с Gemini 3.1 Flash-Lite</p>
+          </div>
+        </div>
+        <!-- 6. 3D Viewer -->
+        <div class="phone-card">
+          <img src="images/archo6.jpeg" alt="3D">
+          <div class="phone-info">
+            <span class="caption" style="color: var(--color-ash);">3D Viewer</span>
+            <p>Объёмная модель находки</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AUDIENCES -->
+    <section class="container">
+      <div style="text-align: center; margin-bottom: 64px;">
+        <span class="caption">Создано для всех</span>
+        <h2>Один инструмент — три сценария.</h2>
+      </div>
+      <div class="grid-3">
+        <div class="card-white">
+          <h3 style="font-size: 24px;">Музеи</h3>
+          <p class="text-muted" style="margin: 12px 0;">Каталогизируйте и анализируйте коллекции.</p>
+          <ul class="text-muted" style="list-style: '→ '; padding-left: 20px;">
+            <li>Автоматическая каталогизация</li>
+            <li>Оценка состояния</li>
+          </ul>
+        </div>
+        <div class="card-white" style="border: 2px solid var(--color-obsidian);">
+          <h3 style="font-size: 24px;">Институты</h3>
+          <p class="text-muted" style="margin: 12px 0;">Ускорьте научные исследования.</p>
+          <ul class="text-muted" style="list-style: '→ '; padding-left: 20px;">
+            <li>Анализ материалов</li>
+            <li>Экспорт данных</li>
+          </ul>
+        </div>
+        <div class="card-white">
+          <h3 style="font-size: 24px;">Полевые археологи</h3>
+          <p class="text-muted" style="margin: 12px 0;">Анализ прямо на месте раскопок.</p>
+          <ul class="text-muted" style="list-style: '→ '; padding-left: 20px;">
+            <li>Мгновенный анализ</li>
+            <li>Облачная синхронизация</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRICING -->
+    <section id="pricing" class="container">
+      <div class="card-white" style="text-align: center; padding: 80px var(--spacing-40);">
+        <span class="badge" style="background: var(--color-obsidian);">Стартовая цена</span>
+        <h2 style="margin: 24px 0;">Инновации по доступной цене.</h2>
+        <div style="margin: 40px 0;">
+          <h3 style="font-size: 64px;">100 000 ₸</h3>
+          <p class="text-muted">≈ $200 USD</p>
+        </div>
+        <div class="grid-3" style="text-align: left; max-width: 800px; margin: 0 auto 40px;">
+          <p class="text-body">✓ Raspberry Pi 5</p>
+          <p class="text-body">✓ USB-камера 12MP</p>
+          <p class="text-body">✓ Защитный корпус</p>
+        </div>
+        <a href="#contact" class="btn-pill" style="padding: 16px 48px; font-size: 16px;">Заказать комплект</a>
+      </div>
+    </section>
+
+    <!-- CONTACT -->
+    <section id="contact" class="container">
+      <div class="flex-split">
+        <div>
+          <span class="caption">Get in Touch</span>
+          <h2 style="margin-top: 12px;">Готовы обсудить ваш проект?</h2>
+          <div style="margin-top: 40px; display: flex; flex-direction: column; gap: 20px;">
+            <p><strong>Phone:</strong> +7 706 696 8011</p>
+            <p><strong>Email:</strong> alihanmurzakmetov15@gmail.com</p>
+            <p><strong>Telegram:</strong> @dialikhan_na</p>
+          </div>
+        </div>
+        <form class="card-white" style="display: flex; flex-direction: column; gap: 16px;">
+          <input type="text" placeholder="Имя" style="padding: 16px; border-radius: 12px; border: 1px solid var(--color-fog); background: var(--color-mist);">
+          <input type="text" placeholder="Телефон или email" style="padding: 16px; border-radius: 12px; border: 1px solid var(--color-fog); background: var(--color-mist);">
+          <textarea placeholder="Расскажите о задаче" rows="4" style="padding: 16px; border-radius: 12px; border: 1px solid var(--color-fog); background: var(--color-mist);"></textarea>
+          <button type="submit" class="btn-pill">Отправить заявку</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-top">
+      <div>
+        <a href="#" class="brand" style="color: white;">
+          <span class="brand-mark" style="background: white; color: black;">A</span>
+          <span>ArchoAI</span>
+        </a>
+        <p style="margin-top: 24px; color: var(--color-ash);">Археология будущего из Казахстана. Открытый стек, доступное железо, понятный AI.</p>
+      </div>
+      <div>
+        <h4 style="margin-bottom: 24px;">Продукт</h4>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 12px; color: var(--color-ash);">
+          <li>О проекте</li>
+          <li>Аппаратная часть</li>
+          <li>Преимущества</li>
+        </ul>
+      </div>
+      <div>
+        <h4 style="margin-bottom: 24px;">Контакты</h4>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 12px; color: var(--color-ash);">
+          <li>+7 706 696 8011</li>
+          <li>Telegram: @dialikhan_na</li>
+        </ul>
+      </div>
+    </div>
+    <div class="container footer-bottom">
+      <p>© 2026 ArchoAI. Все права защищены.</p>
+      <p>v1.0 made with ♥ in Kazakhstan</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

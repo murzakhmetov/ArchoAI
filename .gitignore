@@ -1,0 +1,23 @@
+# Python
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/.ipynb_checkpoints/
+**/*.ipynb
+
+# Flutter/Dart
+**/build/
+**/.dart_tool/
+**/.packages
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/pubspec.lock
+
+# IDEs
+**/.vscode/
+**/.idea/
+**/*.iml
+
+# OS
+.DS_Store
+Thumbs.db
