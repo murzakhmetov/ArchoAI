@@ -36,37 +36,3 @@ The second type of prediction is created using the files: cv2_utils.py and infer
 inference_utils.py is using the Deepcrack model to predict the mask and afterwards the file cv2_utils.py is using OpenCV to create the parameters.
 Subsequently a web app is created with the option to input a number of images with cracks and outputs the length, width, category of the cracks along with a mask for the crack area
 
-![image](https://user-images.githubusercontent.com/46296774/177764562-f7ed470d-22b9-4e13-b5a0-74254b54b841.png)
-[23.05, 16:15] алихан: https://wvhdhfddtusppjmsgmvn.supabase.co/rest/v1/sensor_data
-[23.05, 16:15] алихан: apikey: sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln
-Authorization: Bearer sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln
-Content-Type: application/json
-[23.05, 16:16] алихан: {
-  "temperature": 24.5,
-  "humidity": 45.0,
-  "air_quality": 410.0
-}
-[23.05, 16:16] алихан: curl -X POST 'https://wvhdhfddtusppjmsgmvn.supabase.co/rest/v1/sensor_data' \
--H "apikey: sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln" \
--H "Authorization: Bearer sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln" \
--H "Content-Type: application/json" \
--d '{"temperature": 25.3, "humidity": 48.1, "air_quality": 395}'
-create table public.artifacts (
-  id uuid not null default gen_random_uuid (),
-  name text not null,
-  image_path text not null default ''::text,
-  model_url text null,
-  local_model_path text null,
-  created_at timestamp with time zone null default now(),
-  status text null default 'pending'::text,
-  type text null default 'Unknown'::text,
-  material text null default 'Unknown'::text,
-  era text null default 'Unknown'::text,
-  purpose text null default 'Unknown'::text,
-  condition text null default 'Stable'::text,
-  crack_percentage double precision null default 0.0,
-  constraint artifacts_pkey primary key (id)
-) TABLESPACE pg_default;
-
-
-AQ.Ab8RN6Jl-U_MS5qF4_tFP7OzoWzH0YPz1_dasTFUJ8w2-tBXVw
