@@ -13,14 +13,25 @@ Future<void> main() async {
   // Set preferred orientations
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
-  // Load environment variables
-  await dotenv.load(fileName: '.env');
+  try {
+    // Load environment variables
+    await dotenv.load(fileName: '.env');
 
-  // Initialize Supabase
-  await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-  );
+    final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? 'https://${dotenv.env['SUPABASE_PROJECT_REF']}.supabase.co';
+    final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? dotenv.env['SUPABASE_KEY'];
+
+    if (supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
+      throw Exception('Missing Supabase Anon Key in .env');
+    }
+
+    // Initialize Supabase
+    await Supabase.initialize(
+      url: supabaseUrl,
+      anonKey: supabaseAnonKey,
+    );
+  } catch (e) {
+    debugPrint('CRITICAL INITIALIZATION ERROR: $e');
+  }
 
   // Set system UI overlay style for dark theme
   SystemChrome.setSystemUIOverlayStyle(

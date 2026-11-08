@@ -189,6 +189,8 @@ def read_image(bytesImg, dim=(256, 256)):
     return img    
 
 def create_model(opt, cp_path='pretrained_net_G.pth'):
+    if cp_path == 'pretrained_net_G.pth':
+        cp_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'pretrained_net_G.pth')
     model = DeepCrackModel(opt)
     checkpoint = torch.load(cp_path, map_location=torch.device('cpu')) # Принудительно на CPU для ноута
     if hasattr(model.netG, 'module'):

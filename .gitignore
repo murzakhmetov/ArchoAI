@@ -21,3 +21,8 @@
 # Environment
 .env
 *.env
+
+# Archives
+*.zip
+**/*.zip
+

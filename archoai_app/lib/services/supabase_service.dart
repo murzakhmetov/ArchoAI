@@ -15,7 +15,7 @@ class SupabaseService {
 
   SupabaseClient get _client => Supabase.instance.client;
 
-  // ── Auth ──
+  //  Auth 
 
   User? get currentUser => _client.auth.currentUser;
   bool get isLoggedIn => currentUser != null;
@@ -40,7 +40,7 @@ class SupabaseService {
     await _client.auth.signOut();
   }
 
-  // ── Sensor Data ──
+  //  Sensor Data 
 
   Future<List<SensorData>> getSensorData({int limit = 50}) async {
     final response = await _client
@@ -105,7 +105,7 @@ class SupabaseService {
     return list;
   }
 
-  // ── Artifacts ──
+  //  Artifacts 
 
   Future<List<ArtifactModel>> getArtifacts() async {
     final response = await _client
@@ -165,14 +165,14 @@ class SupabaseService {
 
   Future<String> uploadArtifactModel(String artifactId, String filePath) async {
     final file = File(filePath);
-    final storagePath = 'models/$artifactId.glb';
+    final storagePath = '$artifactId.glb';
     
     await _client.storage
-        .from('artifact-images')
+        .from('3d1')
         .upload(storagePath, file, fileOptions: const FileOptions(upsert: true));
     
     final publicUrl = _client.storage
-        .from('artifact-images')
+        .from('3d1')
         .getPublicUrl(storagePath);
     
     return publicUrl;

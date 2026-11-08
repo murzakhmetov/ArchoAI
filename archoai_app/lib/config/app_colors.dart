@@ -3,29 +3,29 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // ── Backgrounds ──
+  //  Backgrounds 
   static const Color background = Color(0xFF0A0A0F);
   static const Color surface = Color(0xFF14141F);
   static const Color surfaceLight = Color(0xFF1A1A2E);
   static const Color cardBorder = Color(0x661E1E2E);
 
-  // ── Accent ──
+  //  Accent 
   static const Color cyan = Color(0xFF00E5FF);
   static const Color mint = Color(0xFF00F5A0);
   static const Color cyanDark = Color(0xFF0091A1);
   static const Color mintDark = Color(0xFF009B66);
 
-  // ── Signal ──
+  //  Signal 
   static const Color amber = Color(0xFFFFB547);
   static const Color red = Color(0xFFFF4757);
   static const Color green = Color(0xFF2ED573);
 
-  // ── Text ──
+  //  Text 
   static const Color textPrimary = Color(0xFFFFFFFF);
   static const Color textSecondary = Color(0xFF6B7280);
   static const Color textTertiary = Color(0xFF4B5563);
 
-  // ── Gradients ──
+  //  Gradients 
   static const LinearGradient accentGradient = LinearGradient(
     colors: [cyan, mint],
     begin: Alignment.topLeft,

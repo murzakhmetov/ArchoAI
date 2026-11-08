@@ -1,62 +1,77 @@
-# Concrete-Crack-Detection-Segmentation
+#  ArchoAI - AI-Powered Archaeological Conservation
 
-This repository contains the code for crack detection on concrete surfaces. It is a PyTorch implementation of Deep Learning-Based Crack Damage Detection Using Convolutional Neural Networks with DeepCrack
+ArchoAI is a comprehensive ecosystem designed for the digital preservation, analysis, and monitoring of ancient artifacts. It combines AI-driven damage detection, 3D reconstruction, and real-time environment monitoring into a single platform.
 
-DeepCrack: A Deep Hierarchical Feature Learning Architecture for Crack Segmentation
+##  Project Overview
 
+The project is divided into four main components:
 
-Resources: [(Paper: https://github.com/yhlleo/DeepCrack/blob/master/paper/DeepCrack-Neurocomputing-2019.pdf)]
-Architecture: based on Holistically-Nested Edge Detection, ICCV 2015.
+1. ** Mobile Application (`archoai_app`)**: A Flutter-based mobile dashboard for archaeologists to visualize artifact data, monitor environmental conditions, and trigger AI analysis.
+2. ** AI & Processing Scripts (`scripts/`)**: Python-based backend tools for:
+   - **Damage Detection**: Identifying and measuring cracks on artifacts using DeepCrack models.
+   - **3D Reconstruction**: Generating 3D models from images using the Tripo API.
+   - **Database Integration**: Synchronizing analysis results with Supabase.
+3. ** IoT Monitoring (`monitoring.cpp`)**: ESP32-based firmware for real-time tracking of temperature, humidity, and air quality (VOC/Gas) in storage areas.
+4. ** Landing Page (`landing_page/`)**: A modern web interface providing project information and vision.
 
+---
 
-Dependencies required:
+##  Tech Stack
 
-PyTorch,
-OpenCV,
-Dataset -The data set can be downloaded from this link: https://data.mendeley.com/datasets/5y9wdsg2zt/2
+- **Mobile**: Flutter, Dart, Supabase-Flutter SDK
+- **Backend/AI**: Python, PyTorch, OpenCV, Tripo API
+- **Database**: Supabase (PostgreSQL, Realtime, Storage)
+- **Embedded**: C++ (Arduino/ESP32), DHT11, MQ-series Gas Sensors, OLED SSD1306
+- **Web**: Vanilla JS, CSS (Modern Aurora Design)
 
-Dataset:
-The dataset contains concrete images having cracks. The data is collected from various METU Campus Buildings.
-The dataset is divided into two as negative and positive crack images for image classification. 
-Each class has 20000 images with a total of 40000 images with 227 x 227 pixels with RGB channels. 
-The dataset is generated from 458 high-resolution images (4032x3024 pixel) with the method proposed by Zhang et al (2016). 
-High-resolution images have variance in terms of surface finish and illumination conditions. 
-No data augmentation in terms of random rotation or flipping is applied. 
+---
 
-The dataset file creates the training dataset class to be fed into the Convolutional Neural Network. This class automatically determines the number of classes by the number of folders in 'in_dir' (number of folders=number of classes)
+##  Repository Structure
 
-![Capture](https://github.com/yhlleo/DeepCrack/blob/master/figures/architecture.jpg?raw=true)
+```tree
+.
+ archoai_app/          # Flutter mobile application
+ landing_page/         # Project landing page
+ scripts/              # AI inference and utility scripts
+    main.py           # Main processing script
+    withbutton.py     # Tripo 3D generation integration
+    util/             # AI model utilities and networks
+ monitoring.cpp        # ESP32 IoT Monitoring Firmware
+ README.md             # This file
+```
 
-The first type of result is created using the file: Crack recognition.ipynb and the predictions can be seen here:
+---
 
-![Capture](https://user-images.githubusercontent.com/46296774/103016160-edd0b180-4541-11eb-8cfe-3c7680569eb9.PNG)
-![Capture2](https://user-images.githubusercontent.com/46296774/103016173-f4f7bf80-4541-11eb-9bb5-933dcd725d9b.PNG)
+##  Setup & Installation
 
-The second type of prediction is created using the files: cv2_utils.py and inference_utils.py
-inference_utils.py is using the Deepcrack model to predict the mask and afterwards the file cv2_utils.py is using OpenCV to create the parameters.
-Subsequently a web app is created with the option to input a number of images with cracks and outputs the length, width, category of the cracks along with a mask for the crack area
+### AI Scripts
+1. Navigate to the `scripts` folder.
+2. Create a virtual environment: `python -m venv venv`.
+3. Install dependencies: `pip install -r requirements.txt`.
+4. Ensure your `pretrained_net_G.pth` model is in the root of the scripts folder.
 
-![image](https://user-images.githubusercontent.com/46296774/177764562-f7ed470d-22b9-4e13-b5a0-74254b54b841.png)
-[23.05, 16:15] алихан: https://wvhdhfddtusppjmsgmvn.supabase.co/rest/v1/sensor_data
-[23.05, 16:15] алихан: apikey: sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln
-Authorization: Bearer sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln
-Content-Type: application/json
-[23.05, 16:16] алихан: {
-  "temperature": 24.5,
-  "humidity": 45.0,
-  "air_quality": 410.0
-}
-[23.05, 16:16] алихан: curl -X POST 'https://wvhdhfddtusppjmsgmvn.supabase.co/rest/v1/sensor_data' \
--H "apikey: sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln" \
--H "Authorization: Bearer sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln" \
--H "Content-Type: application/json" \
--d '{"temperature": 25.3, "humidity": 48.1, "air_quality": 395}'
+### Mobile App
+1. Ensure Flutter is installed.
+2. Run `flutter pub get` inside `archoai_app`.
+3. Run the app: `flutter run`.
+
+### IoT Monitoring
+1. Compile and flash `monitoring.cpp` using the Arduino IDE or PlatformIO.
+2. Ensure you have the `Adafruit_SSD1306`, `DHT`, and `WiFi` libraries installed.
+3. Update `WIFI_SSID` and `SUPABASE_KEY` in the source code.
+
+---
+
+##  Database Schema (Supabase)
+
+To enable artifact processing, create the following table:
+
+```sql
 create table public.artifacts (
   id uuid not null default gen_random_uuid (),
   name text not null,
   image_path text not null default ''::text,
   model_url text null,
-  local_model_path text null,
   created_at timestamp with time zone null default now(),
   status text null default 'pending'::text,
   type text null default 'Unknown'::text,
@@ -66,7 +81,11 @@ create table public.artifacts (
   condition text null default 'Stable'::text,
   crack_percentage double precision null default 0.0,
   constraint artifacts_pkey primary key (id)
-) TABLESPACE pg_default;
+);
+```
 
+---
 
-AQ.Ab8RN6Jl-U_MS5qF4_tFP7OzoWzH0YPz1_dasTFUJ8w2-tBXVw
+##  License
+
+This project is developed for archaeological research and conservation purposes. All rights reserved.

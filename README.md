@@ -1,22 +1,22 @@
-# 🏛️ ArchoAI - AI-Powered Archaeological Conservation
+#  ArchoAI - AI-Powered Archaeological Conservation
 
 ArchoAI is a comprehensive ecosystem designed for the digital preservation, analysis, and monitoring of ancient artifacts. It combines AI-driven damage detection, 3D reconstruction, and real-time environment monitoring into a single platform.
 
-## 🚀 Project Overview
+##  Project Overview
 
 The project is divided into four main components:
 
-1. **📱 Mobile Application (`archoai_app`)**: A Flutter-based mobile dashboard for archaeologists to visualize artifact data, monitor environmental conditions, and trigger AI analysis.
-2. **🧠 AI & Processing Scripts (`scripts/`)**: Python-based backend tools for:
+1. ** Mobile Application (`archoai_app`)**: A Flutter-based mobile dashboard for archaeologists to visualize artifact data, monitor environmental conditions, and trigger AI analysis.
+2. ** AI & Processing Scripts (`scripts/`)**: Python-based backend tools for:
    - **Damage Detection**: Identifying and measuring cracks on artifacts using DeepCrack models.
    - **3D Reconstruction**: Generating 3D models from images using the Tripo API.
    - **Database Integration**: Synchronizing analysis results with Supabase.
-3. **🌡️ IoT Monitoring (`monitoring.cpp`)**: ESP32-based firmware for real-time tracking of temperature, humidity, and air quality (VOC/Gas) in storage areas.
-4. **🌐 Landing Page (`landing_page/`)**: A modern web interface providing project information and vision.
+3. ** IoT Monitoring (`monitoring.cpp`)**: ESP32-based firmware for real-time tracking of temperature, humidity, and air quality (VOC/Gas) in storage areas.
+4. ** Landing Page (`landing_page/`)**: A modern web interface providing project information and vision.
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 - **Mobile**: Flutter, Dart, Supabase-Flutter SDK
 - **Backend/AI**: Python, PyTorch, OpenCV, Tripo API
@@ -26,23 +26,23 @@ The project is divided into four main components:
 
 ---
 
-## 📂 Repository Structure
+##  Repository Structure
 
 ```tree
 .
-├── archoai_app/          # Flutter mobile application
-├── landing_page/         # Project landing page
-├── scripts/              # AI inference and utility scripts
-│   ├── main.py           # Main processing script
-│   ├── withbutton.py     # Tripo 3D generation integration
-│   └── util/             # AI model utilities and networks
-├── monitoring.cpp        # ESP32 IoT Monitoring Firmware
-└── README.md             # This file
+ archoai_app/          # Flutter mobile application
+ landing_page/         # Project landing page
+ scripts/              # AI inference and utility scripts
+    main.py           # Main processing script
+    withbutton.py     # Tripo 3D generation integration
+    util/             # AI model utilities and networks
+ monitoring.cpp        # ESP32 IoT Monitoring Firmware
+ README.md             # This file
 ```
 
 ---
 
-## 🔧 Setup & Installation
+##  Setup & Installation
 
 ### AI Scripts
 1. Navigate to the `scripts` folder.
@@ -62,7 +62,7 @@ The project is divided into four main components:
 
 ---
 
-## 📊 Database Schema (Supabase)
+##  Database Schema (Supabase)
 
 To enable artifact processing, create the following table:
 
@@ -86,6 +86,6 @@ create table public.artifacts (
 
 ---
 
-## 🛡️ License
+##  License
 
 This project is developed for archaeological research and conservation purposes. All rights reserved.

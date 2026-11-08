@@ -37,7 +37,7 @@ class LocalStorageService {
     return dir.path;
   }
 
-  // ── Artifacts CRUD ──
+  //  Artifacts CRUD 
 
   Future<List<ArtifactModel>> getArtifacts() async {
     try {
@@ -77,7 +77,7 @@ class LocalStorageService {
     await file.writeAsString(jsonEncode(jsonList));
   }
 
-  // ── File Management ──
+  //  File Management 
 
   Future<String> saveImage(File imageFile, String artifactId) async {
     final imagesDir = await _imagesPath;

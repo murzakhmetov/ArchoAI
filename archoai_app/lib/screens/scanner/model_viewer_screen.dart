@@ -256,7 +256,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                           */
                         ],
                       )
-                    : (_isRepairing 
+                    : ((_isDownloading || _isLoadingLocal) 
                         ? const Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -264,7 +264,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                                 CircularProgressIndicator(color: AppColors.cyan),
                                 SizedBox(height: 16),
                                 Text(
-                                  'PREPARING 3D VIEW...',
+                                  'LOADING 3D VIEW...',
                                   style: TextStyle(
                                     color: AppColors.textSecondary,
                                     fontSize: 10,

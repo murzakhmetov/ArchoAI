@@ -818,7 +818,7 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
                       Expanded(
                         child: _buildActionButton(
                           icon: hasImage ? Icons.photo_camera_rounded : Icons.add_a_photo_rounded,
-                          label: hasImage ? 'ФОТО ✓' : 'ДОБАВИТЬ ФОТО',
+                          label: hasImage ? 'ФОТО ' : 'ДОБАВИТЬ ФОТО',
                           color: hasImage ? AppColors.mint : AppColors.textSecondary,
                           filled: hasImage,
                           onTap: isUploading ? null : () => _pickAndUploadImage(artifact),
@@ -829,7 +829,7 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
                       Expanded(
                         child: _buildActionButton(
                           icon: Icons.view_in_ar_rounded,
-                          label: hasModel ? '3D МОДЕЛЬ ✓' : 'СОЗДАТЬ 3D',
+                          label: hasModel ? '3D МОДЕЛЬ ' : 'СОЗДАТЬ 3D',
                           color: hasModel ? AppColors.cyan : AppColors.textSecondary,
                           filled: hasModel,
                           onTap: hasModel
