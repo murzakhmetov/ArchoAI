@@ -11,6 +11,8 @@ from google.genai import types
 
 from util.inference_utils import create_model, inference
 from main import Parameters
+from tripo_client import TripoClient, TripoError
+from supabase_models import store_model, clamp_crack_percentage
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', 'archoai_app', '.env'))
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', 'archoai_app', '.env'))
@@ -100,7 +102,7 @@ def upload_to_supabase_storage(image_bytes):
         "Content-Type": "image/jpeg"
     }
     
-    response = requests.post(upload_url, headers=headers, data=image_bytes)
+    response = requests.post(upload_url, headers=headers, data=image_bytes, timeout=60)
     
     if response.status_code not in [200, 201]:
         raise Exception(f"Ошибка загрузки в Storage (Код {response.status_code}): {response.text}")
@@ -111,10 +113,29 @@ def upload_to_supabase_storage(image_bytes):
 
 
 TRIPO_API_KEY = os.getenv("TRIPO_API_KEY")
-TRIPO_BASE_URL = "https://api.tripo3d.ai/v2/openapi"
-TRIPO_FALLBACK_URL = "https://api.tripo3d.com/v2/openapi"
 
 UPLOAD_GLB_TO_SUPABASE = os.getenv("UPLOAD_GLB_TO_SUPABASE", "true").lower() == "true"
+
+# Tripo multiview_to_model принимает до 4 ракурсов: снимки по порядку съёмки -> front, left, back, right
+TRIPO_VIEW_ORDER = ("front", "left", "back", "right")
+# Ошибки ключа и кредитов: резервный вариант (image_to_model) упадёт точно так же
+TRIPO_NO_FALLBACK_CODES = (2, 1002, 2010)
+# Сколько секунд ждать готовую модель: раньше было 300 с, а клиент по умолчанию ждёт 900 с (15 минут
+# блокировки интерактивного сканирования)
+TRIPO_WAIT_TIMEOUT_SECONDS = 600
+TRIPO_TEMP_LINK_WARNING = (
+    "Внимание: ссылки Tripo временные и скоро перестанут работать. "
+    "Для постоянного хранения включите UPLOAD_GLB_TO_SUPABASE=true."
+)
+# Флаг UPLOAD_GLB_TO_SUPABASE уже включён, но копию в Supabase сделать не удалось
+TRIPO_COPY_FAILED_WARNING = (
+    "Внимание: копия модели в Supabase не создана, сохранена прямая ссылка Tripo. "
+    "Эта ссылка временная и скоро перестанет работать."
+)
+
+
+def print_tripo_progress(progress, status):
+    print(f"    Статус: {str(status).upper()} | Прогресс: {progress}%", end="\r")
 
 
 def generate_3d_model_with_tripo(images_bytes_list):
@@ -125,146 +146,93 @@ def generate_3d_model_with_tripo(images_bytes_list):
     if isinstance(images_bytes_list, bytes):
         images_bytes_list = [images_bytes_list]
 
+    if not images_bytes_list:
+        print("Нет фотографий для генерации 3D-модели. Пропуск.")
+        return None
+
+    if len(images_bytes_list) > len(TRIPO_VIEW_ORDER):
+        extra = len(images_bytes_list) - len(TRIPO_VIEW_ORDER)
+        print(f"Tripo принимает не более {len(TRIPO_VIEW_ORDER)} ракурсов: лишние снимки ({extra} шт.) игнорируются.")
+        images_bytes_list = images_bytes_list[:len(TRIPO_VIEW_ORDER)]
+
     num_photos = len(images_bytes_list)
     print(f"\n[3.5/5] Запуск генерации 3D-модели через Tripo API ({num_photos} ракурс(ов))...")
-    headers = {"Authorization": f"Bearer {TRIPO_API_KEY}"}
 
-    print(f"1. Загрузка {num_photos} фото в Tripo...")
-    file_tokens = []
-    
-    for idx, img_bytes in enumerate(images_bytes_list):
-        files = {"file": (f"artifact_view_{idx+1}.jpg", img_bytes, "image/jpeg")}
-        upload_res = None
-        for base_url in [TRIPO_BASE_URL, TRIPO_FALLBACK_URL]:
-            try:
-                upload_res = requests.post(f"{base_url}/upload", headers=headers, files=files, timeout=30)
-                if upload_res.status_code == 200:
-                    break
-            except Exception as e:
-                print(f"Ошибка запроса к {base_url}: {e}")
+    task_id = None
+    try:
+        client = TripoClient.from_env()
 
-        if not upload_res or upload_res.status_code != 200:
-            print(f"Ошибка загрузки изображения {idx+1} в Tripo: {upload_res.text if upload_res else 'Нет ответа'}")
-            return None
+        print(f"1. Загрузка {num_photos} фото в Tripo...")
+        file_tokens = []
+        for idx, img_bytes in enumerate(images_bytes_list):
+            file_tokens.append(client.upload_image(img_bytes, f"artifact_view_{idx+1}.jpg", "image/jpeg"))
+            print(f"     Фото {idx+1}/{num_photos} загружено в Tripo.")
 
-        upload_data = upload_res.json()
-        if upload_data.get("code") != 0:
-            print(f"Ошибка Tripo API при загрузке фото {idx+1}: {upload_data.get('message')}")
-            return None
-
-        image_token = upload_data["data"].get("image_token") or upload_data["data"].get("file_token")
-        file_tokens.append({"type": "jpg", "file_token": image_token})
-        print(f"     Фото {idx+1}/{num_photos} загружено в Tripo.")
-
-    if len(file_tokens) > 1:
-        print("2. Создание задачи генерации 3D-модели из нескольких ракурсов (multiview_to_model)...")
-        task_payload = {
-            "type": "multiview_to_model",
-            "files": file_tokens
-        }
-    else:
-        print("2. Создание задачи генерации 3D-модели (image_to_model)...")
-        task_payload = {
-            "type": "image_to_model",
-            "file": file_tokens[0]
-        }
-
-    create_task_res = requests.post(f"{TRIPO_BASE_URL}/task", headers=headers, json=task_payload)
-
-    if create_task_res.status_code != 200 or create_task_res.json().get("code") != 0:
-        err_msg = create_task_res.text if create_task_res.status_code != 200 else create_task_res.json().get("message")
-        print(f"Предупреждение: Ошибка создания задачи multiview ({err_msg}).")
         if len(file_tokens) > 1:
-            print("  Пробуем резервный вариант с 1-м снимком (image_to_model)...")
-            fallback_payload = {
-                "type": "image_to_model",
-                "file": file_tokens[0]
-            }
-            create_task_res = requests.post(f"{TRIPO_BASE_URL}/task", headers=headers, json=fallback_payload)
-            if create_task_res.status_code != 200 or create_task_res.json().get("code") != 0:
-                print(f"Ошибка создания резервной задачи Tripo: {create_task_res.text}")
-                return None
+            print("2. Создание задачи генерации 3D-модели из нескольких ракурсов (multiview_to_model)...")
+            try:
+                task_id = client.create_multiview_to_model(dict(zip(TRIPO_VIEW_ORDER, file_tokens)))
+            except TripoError as e:
+                # Резервный вариант (image_to_model) пробуем только после явного отказа API: ответ 4xx
+                # (кроме 429), разобранный клиентом (maybe_created=False). Любой другой исход (5xx,
+                # таймаут, обрыв, 429, непонятный ответ) мог создать задачу: вторая задача спишет
+                # кредиты повторно. Ошибки ключа и кредитов тоже не повторяем: упадёт так же.
+                explicit_rejection = (
+                    e.http_status is not None and 400 <= e.http_status < 500 and e.http_status != 429
+                    and not e.maybe_created
+                )
+                if not explicit_rejection or e.code in TRIPO_NO_FALLBACK_CODES:
+                    raise
+                print(f"Предупреждение: Ошибка создания задачи multiview ({e}).")
+                print("  Пробуем резервный вариант с 1-м снимком (image_to_model)...")
+        else:
+            print("2. Создание задачи генерации 3D-модели (image_to_model)...")
 
-    task_data = create_task_res.json()
-    task_id = task_data["data"]["task_id"]
-    print(f"Задача 3D создана. Task ID: {task_id}")
+        if task_id is None:
+            task_id = client.create_image_to_model(file_tokens[0])
+        print(f"Задача 3D создана. Task ID: {task_id}")
 
-    print("3. Генерация 3D сетки и текстур (это может занять 1-2 минуты)...")
-    start_time = time.time()
-    model_tripo_url = None
-
-    while time.time() - start_time < 300:  
-        time.sleep(5)
-        status_res = requests.get(f"{TRIPO_BASE_URL}/task/{task_id}", headers=headers)
-        if status_res.status_code != 200:
-            continue
-
-        st_json = status_res.json()
-        if st_json.get("code") != 0:
-            continue
-
-        res_data = st_json.get("data", {})
-        status = res_data.get("status", "").lower()
-        progress = res_data.get("progress", 0)
-
-        print(f"    Статус: {status.upper()} | Прогресс: {progress}%", end="\r")
-
-        if status == "success":
-            print("\nГенерация 3D модели в Tripo завершена успешно!")
-            
-            def find_model(obj):
-                if isinstance(obj, dict):
-                    url = obj.get("model") or obj.get("model_url") or obj.get("glb") or obj.get("pbr_model") or obj.get("result_url")
-                    if url:
-                        return url
-                    for v in obj.values():
-                        res = find_model(v)
-                        if res:
-                            return res
-                elif isinstance(obj, list):
-                    for item in obj:
-                        res = find_model(item)
-                        if res:
-                            return res
-                return None
-
-            model_tripo_url = find_model(res_data)
-            break
-
-        elif status in ["failed", "cancelled", "banned"]:
-            print(f"\nГенерация 3D модели провалилась со статусом: {status}")
-            return None
-
-    if not model_tripo_url:
-        print("\nНе удалось получить ссылку на 3D модель из Tripo.")
+        print("3. Генерация 3D сетки и текстур (это может занять 1-2 минуты)...")
+        task = client.wait_for_task(task_id, timeout=TRIPO_WAIT_TIMEOUT_SECONDS, on_progress=print_tripo_progress)
+        print("\nГенерация 3D модели в Tripo завершена успешно!")
+        model_tripo_url = task.model_url
+    except TripoError as e:
+        print(f"\nОшибка Tripo API: {e}")
+        if e.hint:
+            print(f"  Подсказка: {e.hint}")
+        if task_id:
+            print(f"  Task ID: {task_id} (результат можно найти в панели Tripo).")
+        elif e.maybe_created:
+            print("  Tripo мог принять задачу, хотя ответ не получен. Повторный запрос не отправлялся, чтобы не списать кредиты дважды.")
+        print("Генерация 3D-модели пропущена.")
+        return None
+    except Exception as e:
+        print(f"\nНепредвиденная ошибка при работе с Tripo: {e}")
         return None
 
     if not UPLOAD_GLB_TO_SUPABASE:
         print("Режим экономии памяти Supabase Storage (UPLOAD_GLB_TO_SUPABASE=False). Использована прямая ссылка Tripo.")
+        print(TRIPO_TEMP_LINK_WARNING)
         return model_tripo_url
 
-    print(f"4. Перенос 3D GLB файла в Supabase Storage (бакет '{MODEL_BUCKET_NAME}')...")
+    print(f"4. Перенос 3D GLB файла в Supabase Storage (бакет выбирает сервер; '{MODEL_BUCKET_NAME}' только для проекта без выбора бакетов)...")
     try:
-        glb_bytes = requests.get(model_tripo_url).content
-        model_filename = f"artifact_model_{int(time.time())}.glb"
-        upload_url = f"{SUPABASE_MODEL_STORAGE_URL}/{model_filename}"
-
-        storage_headers = {
-            "apikey": SUPABASE_KEY,
-            "Authorization": f"Bearer {SUPABASE_KEY}",
-            "Content-Type": "model/gltf-binary"
-        }
-
-        up_res = requests.post(upload_url, headers=storage_headers, data=glb_bytes)
-        if up_res.status_code in [200, 201]:
-            public_model_url = f"https://{PROJECT_REF}.supabase.co/storage/v1/object/public/{MODEL_BUCKET_NAME}/{model_filename}"
-            print(f"3D модель сохранена в Supabase Storage (бакет '{MODEL_BUCKET_NAME}')!\nПубличная ссылка: {public_model_url}")
-            return public_model_url
-        else:
-            print(f"Не удалось загрузить GLB в Supabase бакет '{MODEL_BUCKET_NAME}' (Код {up_res.status_code}): {up_res.text}")
-            return model_tripo_url
+        # Ссылки Tripo подписаны и временные: забираем GLB сразу после завершения задачи.
+        # Если скачать не удалось, остаётся прямая ссылка Tripo (как и раньше).
+        glb_bytes = client.download(model_tripo_url)
+        # fallback_bucket работает только если на проекте нет RPC выбора бакетов (старый проект без миграций).
+        # Если хранилище заполнено или бакет отказал в загрузке, модель не сохраняется: квота общая для всех бакетов.
+        stored = store_model(
+            glb_bytes, PROJECT_REF, SUPABASE_KEY, tripo_task_id=task_id, fallback_bucket=MODEL_BUCKET_NAME
+        )
+        if stored is not None:
+            print(f"3D модель сохранена в Supabase Storage (бакет '{stored.bucket_id}')!\nПубличная ссылка: {stored.url}")
+            return stored.url
+        print(TRIPO_COPY_FAILED_WARNING)
+        return model_tripo_url
     except Exception as e:
         print(f"Ошибка при переносе GLB файла в Supabase: {e}")
+        print(TRIPO_COPY_FAILED_WARNING)
         return model_tripo_url
 
 
@@ -314,10 +282,8 @@ def save_all_to_supabase(gemini_data, image_url, model_url=None):
         final_payload["model_url"] = model_url
     final_payload["status"] = "complete" if model_url else "pending"
     
-    if "crack_percentage" in final_payload:
-        final_payload["crack_percentage"] = round(float(final_payload["crack_percentage"]), 2)
-    else:
-        final_payload["crack_percentage"] = 0.0
+    # В БД crack_percentage должен быть в пределах 0..100, иначе вставка всей записи отклоняется
+    final_payload["crack_percentage"] = clamp_crack_percentage(final_payload.get("crack_percentage"))
         
     headers = {
         "apikey": SUPABASE_KEY,
@@ -328,7 +294,7 @@ def save_all_to_supabase(gemini_data, image_url, model_url=None):
     
     print(f"Payload для отправки в БД:\n{json.dumps(final_payload, indent=2, ensure_ascii=False)}")
     
-    response = requests.post(SUPABASE_DB_URL, headers=headers, json=final_payload)
+    response = requests.post(SUPABASE_DB_URL, headers=headers, json=final_payload, timeout=60)
     
     if response.status_code in [200, 201]:
         print("\nУСПЕХ! Все данные, фото и 3D-модель сохранены в Supabase!")

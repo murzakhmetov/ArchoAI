@@ -4,16 +4,49 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'dart:convert';
 
 class AiService {
-  static String get _apiKey => dotenv.env['GEMINI_API_KEY'] ?? const String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
-  
-  GenerativeModel get _model => GenerativeModel(
-    model: 'gemini-3.1-flash-lite',
-    apiKey: _apiKey,
-  );
+  static const String _modelName = 'gemini-3.1-flash-lite';
 
-  Future<Map<String, dynamic>> analyzeArtifact(Uint8List imageBytes) async {
+  static String get _apiKey =>
+      (dotenv.isInitialized ? dotenv.env['GEMINI_API_KEY'] : null) ??
+      const String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
+
+  GenerativeModel? _chatModel;
+  GenerativeModel? _jsonModel;
+  String? _modelKey;
+
+  /// Free-text model, created once per API key instead of on every call.
+  GenerativeModel get _model {
+    _syncModels();
+    return _chatModel!;
+  }
+
+  /// Model that is asked to answer with a JSON document only.
+  GenerativeModel get _structuredModel {
+    _syncModels();
+    return _jsonModel!;
+  }
+
+  void _syncModels() {
+    final key = _apiKey;
+    if (key.isEmpty) {
+      throw Exception('GEMINI_API_KEY is not set. Add it to the .env file.');
+    }
+    if (_modelKey == key && _chatModel != null && _jsonModel != null) return;
+    _modelKey = key;
+    _chatModel = GenerativeModel(model: _modelName, apiKey: key);
+    _jsonModel = GenerativeModel(
+      model: _modelName,
+      apiKey: key,
+      generationConfig: GenerationConfig(responseMimeType: 'application/json'),
+    );
+  }
+
+  Future<Map<String, dynamic>> analyzeArtifact(
+    Uint8List imageBytes, {
+    String mimeType = 'image/jpeg',
+  }) async {
     const prompt = '''
-Analyze this archaeological artifact from the image. 
+Analyze this archaeological artifact from the image.
 Provide the analysis in VALID JSON format with exactly these keys:
 - name: (A descriptive name in English)
 - type: (Ceramics, Weapon, Jewelry, Coin, Tool, etc. in English)
@@ -30,20 +63,65 @@ Return ONLY the JSON object.
       final content = [
         Content.multi([
           TextPart(prompt),
-          DataPart('image/jpeg', imageBytes),
+          DataPart(mimeType, imageBytes),
         ])
       ];
-      
-      final response = await _model.generateContent(content);
-      final text = response.text ?? '{}';
-      
-      // Clean up potential markdown formatting
-      final cleanedJson = text.replaceAll('```json', '').replaceAll('```', '').trim();
-      return jsonDecode(cleanedJson) as Map<String, dynamic>;
+
+      final response = await _structuredModel.generateContent(content);
+      return normalizeAnalysis(parseJsonObject(response.text));
     } catch (e) {
       debugPrint('AI Analysis Error: $e');
       throw Exception('Failed to analyze artifact: $e');
     }
+  }
+
+  /// Extracts the JSON object from a model answer. Tolerates markdown fences
+  /// and prose around the object. Throws [FormatException] when there is none.
+  @visibleForTesting
+  static Map<String, dynamic> parseJsonObject(String? text) {
+    final source = (text ?? '').trim();
+    final start = source.indexOf('{');
+    final end = source.lastIndexOf('}');
+    if (start < 0 || end <= start) {
+      throw const FormatException('The AI answer did not contain a JSON object.');
+    }
+    final decoded = jsonDecode(source.substring(start, end + 1));
+    if (decoded is! Map) {
+      throw const FormatException('The AI answer was not a JSON object.');
+    }
+    return Map<String, dynamic>.from(decoded);
+  }
+
+  /// Keeps only the columns of the `artifacts` table that the analysis fills,
+  /// with safe types: extra keys would make the insert fail, and a value such
+  /// as "12%" in `crack_percentage` would break parsing of the stored row.
+  @visibleForTesting
+  static Map<String, dynamic> normalizeAnalysis(Map<String, dynamic> raw) {
+    String text(String key, String fallback) {
+      final value = raw[key];
+      final cleaned = value == null ? '' : value.toString().trim();
+      return cleaned.isEmpty ? fallback : cleaned;
+    }
+
+    double crackPercentage() {
+      final value = raw['crack_percentage'];
+      final parsed = value is num
+          ? value.toDouble()
+          : double.tryParse(
+              value.toString().replaceAll('%', '').replaceAll(',', '.').trim());
+      if (parsed == null || parsed.isNaN || parsed.isInfinite) return 0.0;
+      return parsed.clamp(0.0, 100.0).toDouble();
+    }
+
+    return {
+      'name': text('name', 'Unnamed artifact'),
+      'type': text('type', 'Unknown'),
+      'material': text('material', 'Unknown'),
+      'era': text('era', 'Unknown'),
+      'purpose': text('purpose', 'Unknown'),
+      'condition': text('condition', 'Stable'),
+      'crack_percentage': crackPercentage(),
+    };
   }
 
   Future<String> getComprehensiveInsight({
@@ -65,7 +143,7 @@ Archaeological Safety Ratios:
 - Organic (Paper/Leather): Needs strict 50% RH, any fluctuation is dangerous.
 
 Instruction:
-1. Provide a professional assessment. 
+1. Provide a professional assessment.
 2. Focus on $targetMetric, but correlate it with other metrics (e.g., "if temp rose, explain how it affected RH").
 3. Identify any "Invisible Threats" based on the data.
 4. Keep it concise (3-4 sentences total). Do not use lists.
@@ -94,8 +172,8 @@ COLLECTION STATUS:
 ${artifactsSummary.map((a) => '- ${a['name']} (${a['type']}): Condition ${a['condition']}, Cracks ${a['crack_percentage']}%').join('\n')}
 
 Instruction:
-Provide a high-level strategic overview of the museum's current state. 
-Highlight any correlations between climate and artifact degradation. 
+Provide a high-level strategic overview of the museum's current state.
+Highlight any correlations between climate and artifact degradation.
 Suggest priority actions for the conservation team.
 Be professional, analytical, and concise.
 ''';

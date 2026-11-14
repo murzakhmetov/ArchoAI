@@ -1,20 +1,23 @@
 #!/bin/bash
-# Seed artifacts table via Supabase REST API using service_role key
-# This bypasses RLS policies
+# Seed the artifacts table via the Supabase REST API.
+#
+# Credentials are NOT stored in this file. Pass them through the environment:
+#   SUPABASE_URL       project URL, e.g. https://<project-ref>.supabase.co
+#   SUPABASE_ANON_KEY  the project's anon / publishable key
+#
+# Usage:
+#   SUPABASE_URL=https://<project-ref>.supabase.co SUPABASE_ANON_KEY=<key> ./seed_artifacts.sh
+#
+# The anon key is subject to RLS, so the artifacts table needs an INSERT policy for the anon role
+# (add it in the Supabase SQL editor first), otherwise the request is rejected.
+# A service_role key would bypass RLS, but it must be kept out of this file and out of git too.
 
-SUPABASE_URL="https://wvhdhfddtusppjmsgmvn.supabase.co"
-# We need the full service_role JWT key. The short key doesn't work for REST API auth.
-# Let's add an anon INSERT policy first, then insert data.
+: "${SUPABASE_URL:?Set SUPABASE_URL (e.g. https://<project-ref>.supabase.co)}"
+: "${SUPABASE_ANON_KEY:?Set SUPABASE_ANON_KEY (the anon/publishable key of your Supabase project)}"
 
-# Step 1: Use the SQL endpoint via the Supabase Management API to add anon policy
-# Step 2: Insert data with anon key
-
-# For now, let's try inserting via the anon key after we fix the RLS
-ANON_KEY="sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln"
-
-curl -s -X POST "${SUPABASE_URL}/rest/v1/artifacts" \
-  -H "apikey: ${ANON_KEY}" \
-  -H "Authorization: Bearer ${ANON_KEY}" \
+curl -s -X POST "${SUPABASE_URL%/}/rest/v1/artifacts" \
+  -H "apikey: ${SUPABASE_ANON_KEY}" \
+  -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
   -H "Content-Type: application/json" \
   -H "Prefer: return=representation" \
   -d '[

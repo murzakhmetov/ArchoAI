@@ -25,15 +25,11 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 300),
-        switchInCurve: Curves.easeOut,
-        switchOutCurve: Curves.easeIn,
-        child: IndexedStack(
-          key: ValueKey<int>(_currentIndex),
-          index: _currentIndex,
-          children: _screens,
-        ),
+      // One persistent stack: a key that changes per tab (as the old AnimatedSwitcher
+      // had) would rebuild every tab on each switch and throw away their state.
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(

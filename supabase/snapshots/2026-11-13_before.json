@@ -1,0 +1,480 @@
+{
+    "grants": [
+        {
+            "grantee": "anon",
+            "table_name": "artifacts",
+            "privilege_type": "DELETE"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "artifacts",
+            "privilege_type": "INSERT"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "artifacts",
+            "privilege_type": "REFERENCES"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "artifacts",
+            "privilege_type": "SELECT"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "artifacts",
+            "privilege_type": "TRIGGER"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "artifacts",
+            "privilege_type": "TRUNCATE"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "artifacts",
+            "privilege_type": "UPDATE"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "artifacts",
+            "privilege_type": "DELETE"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "artifacts",
+            "privilege_type": "INSERT"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "artifacts",
+            "privilege_type": "REFERENCES"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "artifacts",
+            "privilege_type": "SELECT"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "artifacts",
+            "privilege_type": "TRIGGER"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "artifacts",
+            "privilege_type": "TRUNCATE"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "artifacts",
+            "privilege_type": "UPDATE"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "sensor_data",
+            "privilege_type": "DELETE"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "sensor_data",
+            "privilege_type": "INSERT"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "sensor_data",
+            "privilege_type": "REFERENCES"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "sensor_data",
+            "privilege_type": "SELECT"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "sensor_data",
+            "privilege_type": "TRIGGER"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "sensor_data",
+            "privilege_type": "TRUNCATE"
+        },
+        {
+            "grantee": "anon",
+            "table_name": "sensor_data",
+            "privilege_type": "UPDATE"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "sensor_data",
+            "privilege_type": "DELETE"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "sensor_data",
+            "privilege_type": "INSERT"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "sensor_data",
+            "privilege_type": "REFERENCES"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "sensor_data",
+            "privilege_type": "SELECT"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "sensor_data",
+            "privilege_type": "TRIGGER"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "sensor_data",
+            "privilege_type": "TRUNCATE"
+        },
+        {
+            "grantee": "authenticated",
+            "table_name": "sensor_data",
+            "privilege_type": "UPDATE"
+        }
+    ],
+    "buckets": [
+        {
+            "id": "3d1",
+            "name": "3d1",
+            "public": true,
+            "file_size_limit": null,
+            "allowed_mime_types": null
+        },
+        {
+            "id": "artifact-images",
+            "name": "artifact-images",
+            "public": true,
+            "file_size_limit": null,
+            "allowed_mime_types": null
+        }
+    ],
+    "columns": [
+        {
+            "data_type": "uuid",
+            "table_name": "artifacts",
+            "column_name": "id",
+            "is_identity": "NO",
+            "is_nullable": "NO",
+            "column_default": "gen_random_uuid()"
+        },
+        {
+            "data_type": "text",
+            "table_name": "artifacts",
+            "column_name": "name",
+            "is_identity": "NO",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "data_type": "text",
+            "table_name": "artifacts",
+            "column_name": "image_path",
+            "is_identity": "NO",
+            "is_nullable": "NO",
+            "column_default": "''::text"
+        },
+        {
+            "data_type": "text",
+            "table_name": "artifacts",
+            "column_name": "model_url",
+            "is_identity": "NO",
+            "is_nullable": "YES",
+            "column_default": null
+        },
+        {
+            "data_type": "text",
+            "table_name": "artifacts",
+            "column_name": "local_model_path",
+            "is_identity": "NO",
+            "is_nullable": "YES",
+            "column_default": null
+        },
+        {
+            "data_type": "timestamp with time zone",
+            "table_name": "artifacts",
+            "column_name": "created_at",
+            "is_identity": "NO",
+            "is_nullable": "YES",
+            "column_default": "now()"
+        },
+        {
+            "data_type": "text",
+            "table_name": "artifacts",
+            "column_name": "status",
+            "is_identity": "NO",
+            "is_nullable": "YES",
+            "column_default": "'pending'::text"
+        },
+        {
+            "data_type": "text",
+            "table_name": "artifacts",
+            "column_name": "type",
+            "is_identity": "NO",
+            "is_nullable": "YES",
+            "column_default": "'Unknown'::text"
+        },
+        {
+            "data_type": "text",
+            "table_name": "artifacts",
+            "column_name": "material",
+            "is_identity": "NO",
+            "is_nullable": "YES",
+            "column_default": "'Unknown'::text"
+        },
+        {
+            "data_type": "text",
+            "table_name": "artifacts",
+            "column_name": "era",
+            "is_identity": "NO",
+            "is_nullable": "YES",
+            "column_default": "'Unknown'::text"
+        },
+        {
+            "data_type": "text",
+            "table_name": "artifacts",
+            "column_name": "purpose",
+            "is_identity": "NO",
+            "is_nullable": "YES",
+            "column_default": "'Unknown'::text"
+        },
+        {
+            "data_type": "text",
+            "table_name": "artifacts",
+            "column_name": "condition",
+            "is_identity": "NO",
+            "is_nullable": "YES",
+            "column_default": "'Stable'::text"
+        },
+        {
+            "data_type": "double precision",
+            "table_name": "artifacts",
+            "column_name": "crack_percentage",
+            "is_identity": "NO",
+            "is_nullable": "YES",
+            "column_default": "0.0"
+        },
+        {
+            "data_type": "bigint",
+            "table_name": "sensor_data",
+            "column_name": "id",
+            "is_identity": "YES",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "data_type": "double precision",
+            "table_name": "sensor_data",
+            "column_name": "temperature",
+            "is_identity": "NO",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "data_type": "double precision",
+            "table_name": "sensor_data",
+            "column_name": "humidity",
+            "is_identity": "NO",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "data_type": "double precision",
+            "table_name": "sensor_data",
+            "column_name": "air_quality",
+            "is_identity": "NO",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "data_type": "timestamp with time zone",
+            "table_name": "sensor_data",
+            "column_name": "created_at",
+            "is_identity": "NO",
+            "is_nullable": "YES",
+            "column_default": "now()"
+        }
+    ],
+    "policies": [
+        {
+            "cmd": "INSERT",
+            "qual": null,
+            "roles": [
+                "authenticated"
+            ],
+            "tablename": "artifacts",
+            "permissive": "PERMISSIVE",
+            "policyname": "Allow authenticated insert",
+            "schemaname": "public",
+            "with_check": "true"
+        },
+        {
+            "cmd": "SELECT",
+            "qual": "true",
+            "roles": [
+                "authenticated"
+            ],
+            "tablename": "artifacts",
+            "permissive": "PERMISSIVE",
+            "policyname": "Allow authenticated read",
+            "schemaname": "public",
+            "with_check": null
+        },
+        {
+            "cmd": "INSERT",
+            "qual": null,
+            "roles": [
+                "public"
+            ],
+            "tablename": "artifacts",
+            "permissive": "PERMISSIVE",
+            "policyname": "Allow public insert",
+            "schemaname": "public",
+            "with_check": "true"
+        },
+        {
+            "cmd": "SELECT",
+            "qual": "true",
+            "roles": [
+                "public"
+            ],
+            "tablename": "sensor_data",
+            "permissive": "PERMISSIVE",
+            "policyname": "sensor_data_read_all",
+            "schemaname": "public",
+            "with_check": null
+        },
+        {
+            "cmd": "SELECT",
+            "qual": "(bucket_id = 'artifact-images'::text)",
+            "roles": [
+                "authenticated"
+            ],
+            "tablename": "objects",
+            "permissive": "PERMISSIVE",
+            "policyname": "Allow all for authenticated users cljxsj_0",
+            "schemaname": "storage",
+            "with_check": null
+        },
+        {
+            "cmd": "INSERT",
+            "qual": null,
+            "roles": [
+                "authenticated"
+            ],
+            "tablename": "objects",
+            "permissive": "PERMISSIVE",
+            "policyname": "Allow all for authenticated users cljxsj_1",
+            "schemaname": "storage",
+            "with_check": "(bucket_id = 'artifact-images'::text)"
+        },
+        {
+            "cmd": "UPDATE",
+            "qual": "(bucket_id = 'artifact-images'::text)",
+            "roles": [
+                "authenticated"
+            ],
+            "tablename": "objects",
+            "permissive": "PERMISSIVE",
+            "policyname": "Allow all for authenticated users cljxsj_2",
+            "schemaname": "storage",
+            "with_check": null
+        },
+        {
+            "cmd": "DELETE",
+            "qual": "(bucket_id = 'artifact-images'::text)",
+            "roles": [
+                "authenticated"
+            ],
+            "tablename": "objects",
+            "permissive": "PERMISSIVE",
+            "policyname": "Allow all for authenticated users cljxsj_3",
+            "schemaname": "storage",
+            "with_check": null
+        },
+        {
+            "cmd": "INSERT",
+            "qual": null,
+            "roles": [
+                "public"
+            ],
+            "tablename": "objects",
+            "permissive": "PERMISSIVE",
+            "policyname": "Allow public insert into 3d1",
+            "schemaname": "storage",
+            "with_check": "(bucket_id = '3d1'::text)"
+        },
+        {
+            "cmd": "INSERT",
+            "qual": null,
+            "roles": [
+                "public"
+            ],
+            "tablename": "objects",
+            "permissive": "PERMISSIVE",
+            "policyname": "Allow public upload cljxsj_0",
+            "schemaname": "storage",
+            "with_check": "((bucket_id = 'artifact-images'::text) AND true)"
+        },
+        {
+            "cmd": "SELECT",
+            "qual": "((bucket_id = 'artifact-images'::text) AND ((storage.foldername(name))[1] = 'private'::text) AND (auth.role() = 'authenticated'::text))",
+            "roles": [
+                "authenticated"
+            ],
+            "tablename": "objects",
+            "permissive": "PERMISSIVE",
+            "policyname": "Give users authenticated access to folder cljxsj_0",
+            "schemaname": "storage",
+            "with_check": null
+        },
+        {
+            "cmd": "INSERT",
+            "qual": null,
+            "roles": [
+                "authenticated"
+            ],
+            "tablename": "objects",
+            "permissive": "PERMISSIVE",
+            "policyname": "Give users authenticated access to folder cljxsj_1",
+            "schemaname": "storage",
+            "with_check": "((bucket_id = 'artifact-images'::text) AND ((storage.foldername(name))[1] = 'private'::text) AND (auth.role() = 'authenticated'::text))"
+        },
+        {
+            "cmd": "UPDATE",
+            "qual": "((bucket_id = 'artifact-images'::text) AND ((storage.foldername(name))[1] = 'private'::text) AND (auth.role() = 'authenticated'::text))",
+            "roles": [
+                "authenticated"
+            ],
+            "tablename": "objects",
+            "permissive": "PERMISSIVE",
+            "policyname": "Give users authenticated access to folder cljxsj_2",
+            "schemaname": "storage",
+            "with_check": null
+        },
+        {
+            "cmd": "DELETE",
+            "qual": "((bucket_id = 'artifact-images'::text) AND ((storage.foldername(name))[1] = 'private'::text) AND (auth.role() = 'authenticated'::text))",
+            "roles": [
+                "authenticated"
+            ],
+            "tablename": "objects",
+            "permissive": "PERMISSIVE",
+            "policyname": "Give users authenticated access to folder cljxsj_3",
+            "schemaname": "storage",
+            "with_check": null
+        }
+    ],
+    "taken_at": "2026-11-13T17:33:30.502761+00:00",
+    "realtime_tables": [
+        "sensor_data"
+    ]
+}

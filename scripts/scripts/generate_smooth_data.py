@@ -4,14 +4,23 @@ import math
 import random
 from datetime import datetime, timedelta
 import os
+import sys
 from dotenv import load_dotenv
 
-# Load credentials
-env_path = os.path.join(os.path.dirname(__file__), '..', 'archoai_app', '.env')
-load_dotenv(env_path)
+# Load credentials. The app's .env lives at <repo>/archoai_app/.env. This script sits in
+# <repo>/scripts/scripts/, so the first path is the right one; the second one is kept for a
+# flat layout where the script is placed directly in <repo>/scripts/.
+for env_path in (
+    os.path.join(os.path.dirname(__file__), '..', '..', 'archoai_app', '.env'),
+    os.path.join(os.path.dirname(__file__), '..', 'archoai_app', '.env'),
+):
+    load_dotenv(env_path)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+# This script writes created_at and 144 rows at once. The publishable (anon) key may only insert the
+# three sensor columns, one row per 2 seconds, so it needs a secret key. Pass it through the SHELL
+# environment (SUPABASE_SERVICE_KEY), never through archoai_app/.env: that file is bundled into the app.
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
 DB_URL = f"{SUPABASE_URL}/rest/v1/sensor_data"
 
 headers = {
@@ -22,6 +31,11 @@ headers = {
 }
 
 def generate_beautiful_data(num_points=144): # 24 hours with 10 min steps
+    """Insert the generated points. Returns True on success, False if nothing was inserted."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("Error: SUPABASE_URL and a key must be set: SUPABASE_SERVICE_KEY in your shell (this script needs a secret key), or SUPABASE_KEY.")
+        return False
+
     now = datetime.utcnow()
     data_points = []
     
@@ -56,19 +70,31 @@ def generate_beautiful_data(num_points=144): # 24 hours with 10 min steps
 
     # Bulk insert
     try:
-        response = requests.post(DB_URL, headers=headers, json=data_points)
+        response = requests.post(DB_URL, headers=headers, json=data_points, timeout=60)
         if response.status_code in [200, 201]:
             print(f"Successfully inserted {num_points} smooth records.")
+            return True
         else:
             print(f"Error: {response.status_code}")
             print(response.text)
+            if response.status_code in (401, 403) and not os.getenv("SUPABASE_SERVICE_KEY"):
+                print("Hint: the publishable key cannot write created_at or bulk rows. Set SUPABASE_SERVICE_KEY "
+                      "in your shell (a secret key, not in archoai_app/.env) and run the script again.")
+                return False
             # If created_at fails, try without it
             if "created_at" in response.text:
                 print("Table might not have 'created_at' column. Retrying without it...")
                 for p in data_points: del p["created_at"]
-                requests.post(DB_URL, headers=headers, json=data_points)
+                retry_response = requests.post(DB_URL, headers=headers, json=data_points, timeout=60)
+                if retry_response.status_code in [200, 201]:
+                    print(f"Successfully inserted {num_points} smooth records (without created_at).")
+                    return True
+                print(f"Retry failed: {retry_response.status_code}")
+                print(retry_response.text)
     except Exception as e:
         print(f"An error occurred: {e}")
+    return False
 
 if __name__ == "__main__":
-    generate_beautiful_data(144)
+    # Exit with a non-zero status when nothing was inserted, so scripts and CI notice the failure
+    sys.exit(0 if generate_beautiful_data(144) else 1)

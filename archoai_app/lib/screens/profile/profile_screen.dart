@@ -308,7 +308,10 @@ class ProfileScreen extends StatelessWidget {
               ],
             ),
           ),
-          trailing ??
+          // A chevron promises navigation, so rows that do nothing on tap get none.
+          if (trailing != null)
+            trailing
+          else if (onTap != null)
             const Icon(
               Icons.chevron_right_rounded,
               color: AppColors.textTertiary,

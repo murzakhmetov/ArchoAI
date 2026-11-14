@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../config/app_colors.dart';
@@ -8,6 +9,20 @@ import '../../widgets/metric_card.dart';
 import '../chat/ai_chat_screen.dart';
 import '../../widgets/glass_card.dart';
 import 'metric_detail_screen.dart';
+
+// A reading older than this means the device has stopped reporting.
+const Duration _deviceOnlineThreshold = Duration(minutes: 2);
+
+// A reading further ahead of the clock than this is a data or clock error, not
+// a live device.
+const Duration _clockSkewTolerance = Duration(minutes: 5);
+
+/// True while the newest reading is less than two minutes old. No reading means offline.
+bool isDeviceOnline(DateTime? latest, {DateTime? now}) {
+  if (latest == null) return false;
+  final age = (now ?? DateTime.now()).difference(latest);
+  return age >= -_clockSkewTolerance && age < _deviceOnlineThreshold;
+}
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -21,11 +36,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<SensorData> _history = [];
   bool _isLoading = true;
   String? _error;
+  StreamSubscription<List<Map<String, dynamic>>>? _sensorSubscription;
+  Timer? _clockTimer;
+  Timer? _resubscribeTimer;
+  bool _pollingLatest = false;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    // Re-render every 30 s so the online badge and the "updated x min ago" text
+    // age even when no new reading arrives.
+    _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      setState(() {});
+      _pollLatestIfStale();
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    _resubscribeTimer?.cancel();
+    _sensorSubscription?.cancel();
+    super.dispose();
+  }
+
+  // Safety net for a dead realtime channel: the badge must not claim that the
+  // device is offline only because the stream stopped delivering.
+  Future<void> _pollLatestIfStale() async {
+    if (_pollingLatest || isDeviceOnline(_latestData?.createdAt)) return;
+    _pollingLatest = true;
+    try {
+      final latest = await SupabaseService.instance.getLatestSensorData();
+      if (!mounted || latest == null) return;
+      final current = _latestData;
+      if (current == null || latest.createdAt.isAfter(current.createdAt)) {
+        setState(() => _latestData = latest);
+      }
+    } catch (e) {
+      debugPrint('Sensor poll failed: $e');
+    } finally {
+      _pollingLatest = false;
+    }
+  }
+
+  // The realtime channel closes for good when its internal re-fetch fails, and
+  // nothing else would reopen it.
+  void _scheduleResubscribe() {
+    if (!mounted || _resubscribeTimer != null) return;
+    _resubscribeTimer = Timer(const Duration(seconds: 10), () {
+      _resubscribeTimer = null;
+      if (mounted) _setupRealtimeStream();
+    });
   }
 
   Future<void> _loadData() async {
@@ -58,24 +121,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _setupRealtimeStream() {
-    SupabaseService.instance.streamSensorData().listen((data) {
-      if (data.isNotEmpty && mounted) {
-        final newLatest = SensorData.fromJson(data.first);
-        setState(() {
-          // Update latest data
-          _latestData = newLatest;
-          
-          // Only append to history if it's a new record by ID
-          if (_history.isEmpty || _history.last.id != newLatest.id) {
-            _history.add(newLatest);
-            // Keep history limited to last 200 points for performance
-            if (_history.length > 200) {
-              _history.removeAt(0);
+    // Every refresh/retry ends up here: drop the old subscription first, otherwise
+    // each one would leave another realtime channel open.
+    _sensorSubscription?.cancel();
+    _sensorSubscription = SupabaseService.instance.streamSensorData().listen(
+      (data) {
+        if (data.isNotEmpty && mounted) {
+          final newLatest = SensorData.fromJson(data.first);
+          setState(() {
+            // Update latest data
+            _latestData = newLatest;
+
+            // Only append to history if it's a new record by ID
+            if (_history.isEmpty || _history.last.id != newLatest.id) {
+              _history.add(newLatest);
+              // Keep history limited to last 200 points for performance
+              if (_history.length > 200) {
+                _history.removeAt(0);
+              }
             }
-          }
-        });
-      }
-    });
+          });
+        }
+      },
+      onError: (Object error) {
+        // Keep the screen alive and show the last known data, then try again.
+        debugPrint('Sensor stream error: $error');
+        _scheduleResubscribe();
+      },
+      onDone: _scheduleResubscribe,
+    );
   }
 
   List<double> _extractSparkline(List<SensorData> data, String field) {
@@ -108,7 +182,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           unit: unit,
           icon: icon,
           accentColor: color,
-          history: _history,
+          // A snapshot: the live list keeps changing under the realtime stream.
+          history: List<SensorData>.unmodifiable(_history),
         ),
       ),
     );
@@ -116,6 +191,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isOnline = isDeviceOnline(_latestData?.createdAt);
+    final Color statusColor = isOnline ? AppColors.mint : AppColors.red;
+
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
@@ -160,26 +238,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           Row(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: AppColors.mint.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: AppColors.mint.withValues(alpha: 0.2)),
+                              // Until the first load finishes there is nothing to judge yet;
+                              // skipping the badge avoids a false "offline" flash on startup.
+                              if (!(_isLoading && _latestData == null)) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: statusColor.withValues(alpha: 0.2)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        isOnline ? 'LIVE' : 'НЕ В СЕТИ',
+                                        style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: const BoxDecoration(color: AppColors.mint, shape: BoxShape.circle),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    const Text('LIVE', style: TextStyle(color: AppColors.mint, fontSize: 10, fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
+                                const SizedBox(width: 8),
+                              ],
                               GestureDetector(
                                 onTap: () => Navigator.push(
                                   context,
@@ -373,8 +458,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const SizedBox(height: 12),
                             _buildSummaryRow(
                               'Статус устройства',
-                              'Подключено',
-                              AppColors.mint,
+                              isOnline ? 'Подключено' : 'Не в сети',
+                              statusColor,
                             ),
                           ],
                         ),
@@ -401,7 +486,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } else if (diff.inMinutes < 60) {
       timeText = 'Обновлено ${diff.inMinutes} мин назад';
     } else {
-      timeText = 'Обновлено в ${DateFormat('HH:mm').format(_latestData!.createdAt)}';
+      timeText = 'Обновлено в ${DateFormat('HH:mm').format(_latestData!.createdAt.toLocal())}';
     }
 
     return Text(

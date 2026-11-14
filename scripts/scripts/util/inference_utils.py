@@ -13,6 +13,11 @@ import imutils
 
 from .models.deepcrack_model import DeepCrackModel
 
+
+class ImageDecodeError(ValueError):
+    """The uploaded bytes are not a decodable image."""
+
+
 # --- БЕЗОПАСНЫЙ ИСПРАВЛЕННЫЙ АЛГОРИТМ РАЗМЕТКИ КОНТУРОВ ---
 
 def midpoint(ptA, ptB):
@@ -178,7 +183,13 @@ def bytes_to_array(b: bytes) -> np.ndarray:
 def read_image(bytesImg, dim=(256, 256)):
     img_transforms = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     img = np.frombuffer(bytesImg, np.uint8)
-    img = cv2.imdecode(img, cv2.IMREAD_COLOR)
+    try:
+        # imdecode returns None for non-image data and raises cv2.error for an empty buffer
+        img = cv2.imdecode(img, cv2.IMREAD_COLOR) if img.size else None
+    except cv2.error:
+        img = None
+    if img is None:
+        raise ImageDecodeError("Не удалось декодировать изображение")
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     
     w, h = dim

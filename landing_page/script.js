@@ -3,7 +3,20 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {
             e.preventDefault();
-            const target = document.querySelector(this.getAttribute('href'));
+            const href = this.getAttribute('href');
+            // A bare "#" (the brand links) means "back to the top".
+            // document.querySelector('#') would throw a SyntaxError.
+            if (href === '#') {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+            let target = null;
+            try {
+                target = document.querySelector(href);
+            } catch (err) {
+                // Not a valid CSS selector (for example "#1abc"): look the id up directly
+                target = document.getElementById(href.slice(1));
+            }
             if (target) {
                 target.scrollIntoView({
                     behavior: 'smooth',

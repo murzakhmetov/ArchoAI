@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +8,65 @@ import '../../config/localization.dart';
 import '../../models/sensor_data.dart';
 import '../../widgets/glass_card.dart';
 import '../../services/ai_service.dart';
+
+/// Y-axis bounds and grid step of a metric chart.
+class ChartRange {
+  final double minY;
+  final double maxY;
+  final double interval;
+
+  const ChartRange({
+    required this.minY,
+    required this.maxY,
+    required this.interval,
+  });
+}
+
+// Readings beyond this are sensor garbage; they must not stretch the axis or overflow
+// the maths below (the chart clips such a point instead).
+const double _maxPlausibleReading = 1e12;
+
+/// Picks Y bounds that cover every plotted value and the safe zone, with about 10%
+/// padding. The bounds are rounded out to a round grid step so the axis labels stay
+/// clean whatever the data range is. [floor] keeps the axis above a physical minimum
+/// (0 PPM, 0 % humidity). NaN, infinite and absurdly large readings are ignored.
+ChartRange computeChartRange(
+  Iterable<double> values, {
+  required double safeMin,
+  required double safeMax,
+  double? floor,
+}) {
+  var low = math.min(safeMin, safeMax);
+  var high = math.max(safeMin, safeMax);
+  for (final v in values) {
+    if (!v.isFinite || v.abs() > _maxPlausibleReading) continue;
+    low = math.min(low, v);
+    high = math.max(high, v);
+  }
+
+  final double span = high - low;
+  // A collapsed range (no spread at all) still needs some room to draw in.
+  final double pad = span > 0 ? span * 0.1 : 1.0;
+  var minY = low - pad;
+  var maxY = high + pad;
+  if (floor != null && minY < floor) minY = floor;
+
+  final double interval = _niceInterval(maxY - minY);
+  minY = (minY / interval).floorToDouble() * interval;
+  maxY = (maxY / interval).ceilToDouble() * interval;
+  if (floor != null && minY < floor) minY = floor;
+
+  return ChartRange(minY: minY, maxY: maxY, interval: interval);
+}
+
+// About four steps across the span, snapped to 1, 2 or 5 times a power of ten.
+double _niceInterval(double span) {
+  final double raw = span / 4;
+  final double magnitude = math.pow(10, (math.log(raw) / math.ln10).floor()).toDouble();
+  final double fraction = raw / magnitude;
+  final double nice = fraction < 1.5 ? 1 : (fraction < 3 ? 2 : (fraction < 7 ? 5 : 10));
+  return nice * magnitude;
+}
 
 class MetricDetailScreen extends StatefulWidget {
   final String title;
@@ -185,6 +245,12 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
     final bool isCurrentOutside = currentVal < safeMin || currentVal > safeMax;
     final String statusText = _getStatusText(currentVal, safeMin, safeMax);
     final Color statusColor = isCurrentOutside ? AppColors.amber : AppColors.mint;
+    final ChartRange range = computeChartRange(
+      values,
+      safeMin: safeMin,
+      safeMax: safeMax,
+      floor: _getAxisFloor(),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -309,8 +375,10 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
                 height: 280, // Increased height for better visibility
                 child: LineChart(
                   LineChartData(
-                    minY: _getMinY(),
-                    maxY: _getMaxY(),
+                    minY: range.minY,
+                    maxY: range.maxY,
+                    // fl_chart draws outside the chart box unless told to clip.
+                    clipData: const FlClipData.all(),
                     lineTouchData: LineTouchData(
                       touchTooltipData: LineTouchTooltipData(
                         getTooltipColor: (touchedSpot) => AppColors.surface.withValues(alpha: 0.95),
@@ -323,7 +391,7 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
                               const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
                               children: [
                                 TextSpan(
-                                  text: DateFormat('HH:mm').format(widget.history[spot.x.toInt()].createdAt),
+                                  text: DateFormat('HH:mm').format(widget.history[spot.x.toInt()].createdAt.toLocal()),
                                   style: TextStyle(color: widget.accentColor, fontWeight: FontWeight.normal, fontSize: 11),
                                 ),
                               ],
@@ -336,7 +404,7 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
                     gridData: FlGridData(
                       show: true,
                       drawVerticalLine: false,
-                      horizontalInterval: _getYInterval(),
+                      horizontalInterval: range.interval,
                       getDrawingHorizontalLine: (value) => FlLine(
                         color: AppColors.textTertiary.withValues(alpha: 0.03),
                         strokeWidth: 1,
@@ -395,7 +463,7 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
                       leftTitles: AxisTitles(
                         sideTitles: SideTitles(
                           showTitles: true,
-                          interval: _getYInterval(),
+                          interval: range.interval,
                           reservedSize: 38,
                           getTitlesWidget: (value, meta) => SideTitleWidget(
                             meta: meta,
@@ -430,6 +498,8 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
                         spots: values
                             .asMap()
                             .entries
+                            // A NaN/infinite point would crash the chart painter.
+                            .where((e) => e.value.isFinite)
                             .map((e) => FlSpot(e.key.toDouble(), e.value))
                             .toList(),
                         isCurved: true,
@@ -612,9 +682,8 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
 
   double _getSafeMin() => widget.title == RU.temperature ? 18 : (widget.title == RU.humidity ? 40 : 0);
   double _getSafeMax() => widget.title == RU.temperature ? 22 : (widget.title == RU.humidity ? 50 : 500);
-  double _getMinY() => widget.title == RU.temperature ? 10 : (widget.title == RU.humidity ? 20 : 300);
-  double _getMaxY() => widget.title == RU.temperature ? 30 : (widget.title == RU.humidity ? 70 : 600);
-  double _getYInterval() => widget.title == RU.temperature ? 5 : (widget.title == RU.humidity ? 10 : 50);
+  // Humidity and air quality cannot go below zero; temperature has no such limit.
+  double? _getAxisFloor() => widget.title == RU.temperature ? null : 0;
 
   String _getStatusText(double val, double min, double max) {
     if (val < min) return RU.belowRecommended;

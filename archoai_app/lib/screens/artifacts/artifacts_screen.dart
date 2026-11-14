@@ -10,6 +10,7 @@ import '../../services/supabase_service.dart';
 import '../../services/ai_service.dart';
 import '../../services/tripo_service.dart';
 import '../../services/local_storage_service.dart';
+import '../../services/model_storage.dart';
 import '../scanner/model_viewer_screen.dart';
 import '../../widgets/glass_card.dart';
 
@@ -52,14 +53,17 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
   }
 
   void _setupRealtime() {
-    _artifactsSubscription = _supabaseService.streamArtifacts().listen((updatedList) {
-      if (mounted) {
+    _artifactsSubscription = _supabaseService.streamArtifacts().listen(
+      (updatedList) {
+        if (!mounted) return;
         setState(() {
           _artifacts = updatedList;
           _isLoading = false;
         });
-      }
-    });
+      },
+      // A realtime hiccup must not become an unhandled async error.
+      onError: (Object e) => debugPrint('Artifacts stream error: $e'),
+    );
   }
 
   @override
@@ -72,169 +76,23 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
     setState(() => _isLoading = true);
     try {
       final data = await _supabaseService.getArtifacts();
+      if (!mounted) return;
       setState(() {
         _artifacts = data;
         _isLoading = false;
       });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка загрузки: $e')),
-        );
-      }
+      if (!mounted) return;
       setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _generateAndSave3D(ArtifactModel artifact, File imageFile) async {
-    try {
-      setState(() {
-        _aiStatus = 'Initializing 3D Scan...';
-        _aiProgress = 10;
-      });
-
-      final taskId = await TripoService.instance.createImageToModelTask(imageFile);
-      
-      final result = await TripoService.instance.waitForTask(
-        taskId,
-        onProgress: (p) {
-          if (mounted) {
-            setState(() {
-              _aiProgress = 10 + (p * 0.8).toInt();
-              _aiStatus = 'Generating 3D Mesh ($p%)...';
-            });
-          }
-        },
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка загрузки: $e')),
       );
-
-      if (result.isComplete && result.modelUrl != null) {
-        setState(() {
-          _aiStatus = 'Downloading 3D model...';
-          _aiProgress = 95;
-        });
-
-        final localPath = await LocalStorageService.instance.getModelSavePath(artifact.id);
-        await TripoService.instance.downloadModel(result.modelUrl!, localPath);
-        
-        await _supabaseService.updateArtifactModelPath(artifact.id, localPath, modelUrl: result.modelUrl);
-
-        setState(() {
-          final idx = _artifacts.indexWhere((a) => a.id == artifact.id);
-          if (idx != -1) {
-            _artifacts[idx] = _artifacts[idx].copyWith(
-              localModelPath: localPath,
-              modelUrl: result.modelUrl,
-            );
-          }
-        });
-      }
-    } catch (e) {
-      debugPrint('3D Generation Error: $e');
-      // We don't fail the whole artifact creation if 3D fails, just show a minor error
-      if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('3D Scan failed: $e')),
-        );
-      }
     }
   }
 
-  Future<void> _generate3DForExisting(ArtifactModel artifact) async {
-    // Show picker to get a new photo for 3D generation
-    final ImageSource? source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(color: AppColors.textTertiary, borderRadius: BorderRadius.circular(2)),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Фото для 3D модели',
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                artifact.name,
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: AppColors.mint.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.camera_alt_rounded, color: AppColors.mint),
-                ),
-                title: Text(S.current.translate('Camera')),
-                onTap: () => Navigator.pop(ctx, ImageSource.camera),
-              ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: AppColors.cyan.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.photo_library_rounded, color: AppColors.cyan),
-                ),
-                title: Text(S.current.translate('Gallery')),
-                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (source == null) return;
-
-    final XFile? image = await _picker.pickImage(
-      source: source,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 80,
-    );
-    if (image == null) return;
-
-    setState(() {
-      _isAiAnalyzing = true;
-      _aiProgress = 5;
-      _aiStatus = 'Запуск 3D-сканирования...';
-    });
-
-    try {
-      await _generateAndSave3D(artifact, File(image.path));
-      setState(() => _isAiAnalyzing = false);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('3D модель успешно создана!'),
-            backgroundColor: AppColors.mint,
-          ),
-        );
-      }
-    } catch (e) {
-      setState(() => _isAiAnalyzing = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка 3D: $e'),
-            backgroundColor: AppColors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _analyzeAndCreateArtifact() async {
-    final ImageSource? source = await showModalBottomSheet<ImageSource>(
+  /// Camera/gallery chooser shared by every flow on this screen.
+  Future<ImageSource?> _pickImageSource(String title, {String? subtitle}) {
+    return showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
@@ -256,13 +114,23 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
               ),
               const SizedBox(height: 20),
               Text(
-                S.current.addArtifact,
+                title,
                 style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                 ),
               ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
               ListTile(
                 leading: Container(
@@ -293,7 +161,188 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
         ),
       ),
     );
+  }
 
+  /// Keeps the Tripo task of [artifactId] on this device (and in the list).
+  /// A started task is already paid for: with its id the model can still be
+  /// fetched later if polling or the download fails or the app is closed.
+  Future<void> _rememberTask(String artifactId, String taskId) async {
+    try {
+      await LocalStorageService.instance.saveTripoTaskId(artifactId, taskId);
+    } catch (e) {
+      debugPrint('Could not remember Tripo task $taskId: $e');
+    }
+    if (!mounted) return;
+    setState(() {
+      final idx = _artifacts.indexWhere((a) => a.id == artifactId);
+      if (idx != -1) {
+        _artifacts[idx] = _artifacts[idx].copyWith(tripoTaskId: taskId);
+      }
+    });
+  }
+
+  /// Mirrors the Tripo task id to Supabase (null clears it), so another
+  /// device can recover a paid model too. Best effort.
+  Future<void> _syncTaskId(String artifactId, String? taskId) async {
+    try {
+      await _supabaseService.updateArtifactTaskId(artifactId, taskId);
+    } catch (e) {
+      debugPrint('Could not sync the Tripo task id of $artifactId: $e');
+    }
+  }
+
+  /// Drops the stored task once its model is saved or the task is dead.
+  /// [clearRemote] false keeps the id in Supabase until the cloud copy exists.
+  Future<void> _forgetTask(String artifactId, {bool clearRemote = true}) async {
+    try {
+      await LocalStorageService.instance.clearTripoTaskId(artifactId);
+    } catch (e) {
+      debugPrint('Could not clear the Tripo task of $artifactId: $e');
+    }
+    if (clearRemote) await _syncTaskId(artifactId, null);
+    if (!mounted) return;
+    setState(() {
+      final idx = _artifacts.indexWhere((a) => a.id == artifactId);
+      if (idx != -1) {
+        _artifacts[idx] = _artifacts[idx].copyWith(clearTripoTaskId: true);
+      }
+    });
+  }
+
+  /// Copies the saved model into the Supabase batches so other devices can
+  /// open it. Never fails the flow: the model is already safe on this device.
+  Future<void> _publishModel(
+    ArtifactModel artifact,
+    String localPath,
+    String taskId,
+  ) async {
+    if (!isDatabaseId(artifact.id)) return;
+    try {
+      if (mounted) {
+        setState(() {
+          _aiStatus = 'Uploading 3D model to the cloud...';
+          _aiProgress = 98;
+        });
+      }
+      final stored = await _supabaseService.uploadArtifactModel(
+        artifact.id,
+        localPath,
+        tripoTaskId: taskId,
+      );
+      await _supabaseService.attachModelToArtifact(artifact.id, stored);
+      if (!mounted) return;
+      setState(() {
+        final idx = _artifacts.indexWhere((a) => a.id == artifact.id);
+        if (idx != -1) {
+          _artifacts[idx] = _artifacts[idx].copyWith(modelUrl: stored.url);
+        }
+      });
+    } on ModelStorageException catch (e) {
+      _showSnack('The model is saved on this device only. ${e.message}');
+    } catch (e) {
+      debugPrint('Cloud upload of the model failed: $e');
+      _showSnack('The model is saved on this device only: cloud upload failed ($e).');
+    }
+  }
+
+  void _showSnack(String message, {Color? background}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: background),
+    );
+  }
+
+  /// Generates a 3D model from [imageFile] and keeps the GLB on this device.
+  ///
+  /// Returns true on success. A failure is reported with a snackbar and does
+  /// not abort the surrounding flow, because the artifact record already exists.
+  Future<bool> _generateAndSave3D(ArtifactModel artifact, File imageFile) async {
+    try {
+      if (mounted) {
+        setState(() {
+          _aiStatus = 'Initializing 3D Scan...';
+          _aiProgress = 10;
+        });
+      }
+
+      final taskId = await TripoService.instance.createImageToModelTask(imageFile);
+      // Paid for from here on: remember the task before waiting for it.
+      await _rememberTask(artifact.id, taskId);
+      await _syncTaskId(artifact.id, taskId);
+
+      final result = await TripoService.instance.waitForTask(
+        taskId,
+        isCancelled: () => !mounted,
+        onProgress: (p) {
+          if (!mounted) return;
+          setState(() {
+            _aiProgress = 10 + (p * 0.8).toInt();
+            _aiStatus = 'Generating 3D Mesh ($p%)...';
+          });
+        },
+      );
+
+      final modelUrl = result.modelUrl;
+      if (modelUrl == null) {
+        throw TripoException('Tripo finished the task but returned no model.');
+      }
+
+      if (mounted) {
+        setState(() {
+          _aiStatus = 'Downloading 3D model...';
+          _aiProgress = 95;
+        });
+      }
+
+      // Tripo links are temporary: keep the GLB on the device right away. The
+      // link itself is not written to Supabase, where it would soon be dead.
+      final localPath =
+          await LocalStorageService.instance.getModelSavePath(artifact.id);
+      try {
+        await TripoService.instance
+            .downloadTaskModel(taskId, localPath, knownUrl: modelUrl);
+      } catch (e) {
+        // The model exists and was paid for. The task id stays stored, so the
+        // artifact keeps its 3D button and "Save to device" can try again.
+        debugPrint('Could not save the generated model: $e');
+        _showSnack(
+          'The 3D model is ready but could not be saved to the device: $e. '
+          'Open the artifact and tap "Save to device".',
+        );
+        return false;
+      }
+
+      // The model is on this device now. The id stays in Supabase until the
+      // cloud copy below exists, so other devices could still recover it.
+      await _forgetTask(artifact.id, clearRemote: false);
+      if (mounted) {
+        setState(() {
+          final idx = _artifacts.indexWhere((a) => a.id == artifact.id);
+          if (idx != -1) {
+            _artifacts[idx] = _artifacts[idx].copyWith(localModelPath: localPath);
+          }
+        });
+      }
+      await _publishModel(artifact, localPath, taskId);
+      return true;
+    } on TripoCancelledException {
+      return false;
+    } catch (e) {
+      debugPrint('3D Generation Error: $e');
+      // A task that ended in a terminal failure can never deliver a model.
+      if (e is TripoException && e.taskFailed) await _forgetTask(artifact.id);
+      // We don't fail the whole artifact creation if 3D fails, just show a minor error
+      _showSnack('3D Scan failed: $e');
+      return false;
+    }
+  }
+
+  Future<void> _generate3DForExisting(ArtifactModel artifact) async {
+    // Show picker to get a new photo for 3D generation
+    final ImageSource? source = await _pickImageSource(
+      'Фото для 3D модели',
+      subtitle: artifact.name,
+    );
     if (source == null) return;
 
     final XFile? image = await _picker.pickImage(
@@ -302,7 +351,38 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
       maxHeight: 1024,
       imageQuality: 80,
     );
-    if (image == null) return;
+    if (image == null || !mounted) return;
+
+    setState(() {
+      _isAiAnalyzing = true;
+      _aiProgress = 5;
+      _aiStatus = 'Запуск 3D-сканирования...';
+    });
+
+    var created = false;
+    try {
+      created = await _generateAndSave3D(artifact, File(image.path));
+    } finally {
+      if (mounted) setState(() => _isAiAnalyzing = false);
+    }
+
+    // _generateAndSave3D already reported a failure, so only confirm success.
+    if (created) {
+      _showSnack('3D модель успешно создана!', background: AppColors.mint);
+    }
+  }
+
+  Future<void> _analyzeAndCreateArtifact() async {
+    final ImageSource? source = await _pickImageSource(S.current.addArtifact);
+    if (source == null) return;
+
+    final XFile? image = await _picker.pickImage(
+      source: source,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 80,
+    );
+    if (image == null || !mounted) return;
 
     setState(() {
       _isAiAnalyzing = true;
@@ -313,7 +393,10 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
     try {
       // 1. Analyze with Gemini
       final bytes = await image.readAsBytes();
-      final aiData = await _aiService.analyzeArtifact(bytes);
+      final aiData = await _aiService.analyzeArtifact(
+        bytes,
+        mimeType: _mimeTypeFor(image.path),
+      );
 
       // 2. Upload photo to get URL
       final tempId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -323,105 +406,44 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
       final newArtifactData = {
         ...aiData,
         'image_path': url,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
         'status': 'cataloged',
       };
 
       final newArtifact = await _supabaseService.createArtifact(newArtifactData);
+      if (!mounted) return;
 
       setState(() {
-        _artifacts.insert(0, newArtifact);
+        // The realtime stream may already have delivered the new row.
+        if (!_artifacts.any((a) => a.id == newArtifact.id)) {
+          _artifacts.insert(0, newArtifact);
+        }
       });
 
       // 4. Start 3D generation (will update state when done)
-      await _generateAndSave3D(newArtifact, File(image.path));
+      final has3D = await _generateAndSave3D(newArtifact, File(image.path));
+      if (!mounted) return;
 
       setState(() => _isAiAnalyzing = false);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(S.current.photoSuccess),
-            backgroundColor: AppColors.mint,
-          ),
-        );
+      // A failed 3D step already showed its own message.
+      if (has3D) {
+        _showSnack(S.current.photoSuccess, background: AppColors.mint);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isAiAnalyzing = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${S.current.analysisError}: $e'),
-            backgroundColor: AppColors.red,
-          ),
-        );
-      }
+      _showSnack('${S.current.analysisError}: $e', background: AppColors.red);
     }
   }
 
-  Future<void> _pickAndUploadImage(ArtifactModel artifact) async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.textTertiary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                artifact.imagePath.isEmpty 
-                    ? S.current.addPhoto 
-                    : S.current.changePhoto,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.mint.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.camera_alt_rounded, color: AppColors.mint),
-                ),
-                title: Text(S.current.translate('Camera')),
-                onTap: () => Navigator.pop(ctx, ImageSource.camera),
-              ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.cyan.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.photo_library_rounded, color: AppColors.cyan),
-                ),
-                title: Text(S.current.translate('Gallery')),
-                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  String _mimeTypeFor(String path) =>
+      path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
 
+  Future<void> _pickAndUploadImage(ArtifactModel artifact) async {
+    final source = await _pickImageSource(
+      artifact.imagePath.isEmpty ? S.current.addPhoto : S.current.changePhoto,
+    );
     if (source == null) return;
 
     final XFile? image = await _picker.pickImage(
@@ -430,7 +452,7 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
       maxHeight: 1920,
       imageQuality: 85,
     );
-    if (image == null) return;
+    if (image == null || !mounted) return;
 
     setState(() {
       _uploadingArtifactId = artifact.id;
@@ -440,8 +462,13 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
     });
 
     try {
-      final url = await _supabaseService.uploadArtifactImage(artifact.id, image.path);
+      // The storage path is reused for a replaced photo, so add a version
+      // query to stop Image.network from showing the cached old picture.
+      final storedUrl =
+          await _supabaseService.uploadArtifactImage(artifact.id, image.path);
+      final url = '$storedUrl?v=${DateTime.now().millisecondsSinceEpoch}';
       await _supabaseService.updateArtifactImage(artifact.id, url);
+      if (!mounted) return;
 
       setState(() {
         final idx = _artifacts.indexWhere((a) => a.id == artifact.id);
@@ -453,24 +480,17 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
 
       // Start 3D scan update
       await _generateAndSave3D(artifact, File(image.path));
-      
-      setState(() => _isAiAnalyzing = false);
+      if (!mounted) return;
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(S.current.photoSuccess)),
-        );
-      }
+      setState(() => _isAiAnalyzing = false);
+      _showSnack(S.current.photoSuccess);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _uploadingArtifactId = null;
         _isAiAnalyzing = false;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${S.current.photoError}: $e')),
-        );
-      }
+      _showSnack('${S.current.photoError}: $e');
     }
   }
 
@@ -615,7 +635,10 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
   Widget _buildArtifactCard(ArtifactModel artifact) {
     final isUploading = _uploadingArtifactId == artifact.id;
     final hasImage = artifact.imagePath.isNotEmpty;
-    final hasModel = (artifact.localModelPath != null && artifact.localModelPath!.isNotEmpty) || (artifact.modelUrl != null && artifact.modelUrl!.isNotEmpty);
+    // A stored Tripo task counts too: its model can still be fetched.
+    final hasModel = (artifact.localModelPath != null && artifact.localModelPath!.isNotEmpty) ||
+        (artifact.modelUrl != null && artifact.modelUrl!.isNotEmpty) ||
+        (artifact.tripoTaskId != null && artifact.tripoTaskId!.isNotEmpty);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),

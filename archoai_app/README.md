@@ -1,17 +1,26 @@
 # archoai_app
 
-A new Flutter project.
+Flutter client of ArchoAI: artifact catalogue with AI analysis (Gemini), 3D scanning (Tripo API v3), live storage-room monitoring (Supabase realtime) and an AI conservator chat.
 
-## Getting Started
+## Run
 
-This project is a starting point for a Flutter application.
+```bash
+cp .env.example .env     # then fill in your keys
+flutter pub get
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
+`.env` is git-ignored but declared as a Flutter asset, so `flutter run`, `flutter build` and `flutter test` need the file to exist. If a key is missing or Supabase cannot be initialised, the app shows a configuration screen instead of crashing.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Test
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter test
+flutter analyze
+```
+
+On Windows, native-asset hooks fail with `Failed to canonicalize path ... (122)` when the project lives under a path longer than 260 characters or one containing non-ASCII characters. Keep the checkout in a short ASCII path such as `C:\dev\ArchoAI` when running `flutter test`.
+
+## Configuration
+
+See `.env.example` for every variable. The Tripo integration (`lib/services/tripo_service.dart`) is described in the repository root README.

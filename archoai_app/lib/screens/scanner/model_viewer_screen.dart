@@ -6,6 +6,7 @@ import '../../config/app_colors.dart';
 import '../../models/artifact_model.dart';
 import '../../services/tripo_service.dart';
 import '../../services/local_storage_service.dart';
+import '../../services/model_storage.dart';
 import '../../services/supabase_service.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -32,8 +33,6 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
     _currentModelUrl = widget.artifact.modelUrl;
     _checkLocalModel();
     debugPrint('3D MODEL VIEWER: Initializing with ${widget.artifact.name}');
-    debugPrint('3D MODEL VIEWER: Network URL: ${widget.artifact.modelUrl}');
-    debugPrint('3D MODEL VIEWER: Source to be used: $_modelSource');
   }
 
   Future<void> _checkLocalModel() async {
@@ -63,6 +62,9 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
             _isLoadingLocal = false;
           });
         }
+      } else if (mounted) {
+        // The file vanished: stop the spinner and fall back to the network URL.
+        setState(() => _isLoadingLocal = false);
       }
     } catch (e) {
       debugPrint('Error loading local model as base64: $e');
@@ -70,10 +72,15 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
     }
   }
 
-  // Removed _repairArtifactWithUpload as per user request to avoid cloud file uploads
+  // The old on-demand upload from this screen (_repairArtifactWithUpload) is gone on purpose. The only
+  // cloud upload left here is the best-effort copy of a model that was just recovered from its Tripo
+  // task (see _downloadModel): it stores the file in the Supabase model batches so that other
+  // devices can open it too. Remove that block to keep this screen strictly local.
 
   Future<void> _downloadModel() async {
-    if (widget.artifact.modelUrl == null) return;
+    final modelUrl = widget.artifact.modelUrl;
+    final taskId = widget.artifact.tripoTaskId;
+    if ((modelUrl == null && taskId == null) || _isDownloading) return;
 
     setState(() => _isDownloading = true);
 
@@ -81,47 +88,77 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
       final savePath = await LocalStorageService.instance
           .getModelSavePath(widget.artifact.id);
 
-      await TripoService.instance.downloadModel(
-        widget.artifact.modelUrl!,
-        savePath,
-      );
+      if (taskId != null) {
+        // Tripo links expire: when the stored one fails, the task hands out a
+        // fresh one (and it also recovers a model that has no link stored).
+        await TripoService.instance
+            .downloadTaskModel(taskId, savePath, knownUrl: modelUrl);
+      } else {
+        await TripoService.instance.downloadModel(modelUrl!, savePath);
+      }
 
-      // Update artifact locally
-      final updated = widget.artifact.copyWith(localModelPath: savePath);
-      await LocalStorageService.instance.saveArtifact(updated);
+      // The file is on the device now. The records below are bookkeeping and
+      // must not turn a good download into an error. The device path is
+      // deliberately not written to Supabase: it is meaningless on every other
+      // device, and artifacts created in the scanner have no row there at all.
+      try {
+        await LocalStorageService.instance
+            .clearTripoTaskId(widget.artifact.id);
+        await LocalStorageService.instance.saveArtifact(widget.artifact
+            .copyWith(localModelPath: savePath, clearTripoTaskId: true));
+      } catch (e) {
+        debugPrint('Viewer: could not update the local records: $e');
+      }
 
-      // Update artifact in Supabase PERMANENTLY so it persists after app restart
-      // We pass the current URL as well to keep it accessible
-      await SupabaseService.instance.updateArtifactModelPath(
-        widget.artifact.id, 
-        savePath, 
-        modelUrl: _currentModelUrl
-      );
-
+      if (!mounted) return;
       setState(() {
         _isDownloading = false;
         _isDownloaded = true;
         _localPath = savePath;
       });
+      // Show the saved file from now on: the Tripo link will expire.
+      _loadLocalAsBase64(savePath);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Model saved to device'),
-            backgroundColor: AppColors.mint.withValues(alpha: 0.9),
-          ),
-        );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Model saved to device'),
+          backgroundColor: AppColors.mint.withValues(alpha: 0.9),
+        ),
+      );
+
+      // A model recovered from its Tripo task never reached the cloud: copy it
+      // now so other devices can open it. Best effort, the file is safe locally.
+      // Nothing below uses the context or the state, so it may outlive the screen.
+      final artifactId = widget.artifact.id;
+      if (taskId != null && isDatabaseId(artifactId)) {
+        try {
+          final stored = await SupabaseService.instance.uploadArtifactModel(
+            artifactId,
+            savePath,
+            tripoTaskId: taskId,
+          );
+          await SupabaseService.instance.attachModelToArtifact(artifactId, stored);
+        } catch (e) {
+          debugPrint('Viewer: cloud copy of the recovered model failed: $e');
+        }
       }
     } catch (e) {
-      setState(() => _isDownloading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Download failed: ${e.toString()}'),
-            backgroundColor: AppColors.red.withValues(alpha: 0.9),
-          ),
-        );
+      if (e is TripoException && e.taskFailed) {
+        // Nothing can be recovered from this task any more.
+        _taskGone = true;
+        try {
+          await LocalStorageService.instance
+              .clearTripoTaskId(widget.artifact.id);
+        } catch (_) {}
       }
+      if (!mounted) return;
+      setState(() => _isDownloading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Download failed: ${e.toString()}'),
+          backgroundColor: AppColors.red.withValues(alpha: 0.9),
+        ),
+      );
     }
   }
 
@@ -135,6 +172,14 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
       subject: 'ArchoAI 3D Artifact Export',
     );
   }
+
+  // Set when Tripo reported the stored task as failed/cancelled/expired.
+  bool _taskGone = false;
+
+  /// A stored link or a stored (still alive) Tripo task can deliver the model.
+  bool get _canDownload =>
+      widget.artifact.modelUrl != null ||
+      (widget.artifact.tripoTaskId != null && !_taskGone);
 
   String get _modelSource {
     // 1. If we have a local file already loaded as Base64, use it.
@@ -185,7 +230,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
         ),
         actions: [
           // Download button
-          if (widget.artifact.modelUrl != null)
+          if (_canDownload)
             IconButton(
               icon: _isDownloading
                   ? const SizedBox(
@@ -275,10 +320,13 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                               ],
                             ),
                           )
-                        : const Center(
+                        : Center(
                             child: Text(
-                              'Model source is missing',
-                              style: TextStyle(color: AppColors.textSecondary),
+                              _canDownload
+                                  ? 'The model is not saved on this device yet.\nTap SAVE TO DEVICE to fetch it.'
+                                  : 'Model source is missing',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: AppColors.textSecondary),
                             ),
                           )),
               ),
@@ -310,7 +358,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                 const SizedBox(height: 16),
 
                 // Download button (large)
-                if (!_isDownloaded && widget.artifact.modelUrl != null)
+                if (!_isDownloaded && _canDownload)
                   SizedBox(
                     width: double.infinity,
                     height: 50,

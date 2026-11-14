@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../config/app_colors.dart';
 import '../../config/localization.dart';
@@ -20,18 +21,39 @@ class _AiChatScreenState extends State<AiChatScreen> {
   final List<Map<String, String>> _messages = [];
   bool _isTyping = false;
   String _context = '';
+  // Lets _sendMessage wait for the context instead of asking the AI without it.
+  late Future<void> _contextLoad;
+  // Set after the first wait times out, so a hung load delays one message, not every one.
+  bool _contextWaitAbandoned = false;
+  // The tab lives for the whole session (IndexedStack), so an old snapshot
+  // of sensors and artifacts is refreshed before it is sent to the AI.
+  static const Duration _contextMaxAge = Duration(minutes: 5);
+  DateTime? _contextLoadedAt;
+  bool _contextLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadGlobalContext();
+    _contextLoad = _loadGlobalContext();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadGlobalContext() async {
+    _contextLoading = true;
     // Only load context, don't generate a welcome message anymore
     try {
-      final history = await _supabaseService.getSensorDataHistory();
-      final artifacts = await _supabaseService.getArtifacts();
+      // Real data only: the sample points and demo artifacts that the screens
+      // use must not reach the AI as if they were measurements.
+      final history =
+          await _supabaseService.getSensorDataHistory(sampleFallback: false);
+      final artifacts =
+          await _supabaseService.getArtifacts(seedIfEmpty: false);
       
       String env = history.isNotEmpty 
           ? 'Temp: ${history.last.temperature}°C, Hum: ${history.last.humidity}%, Air: ${history.last.airQuality}PPM'
@@ -39,10 +61,17 @@ class _AiChatScreenState extends State<AiChatScreen> {
       
       String arts = artifacts.map((a) => '${a.name} (${a.condition}, ${a.crackPercentage}% cracks)').join(', ');
       _context = 'Museum Status: $env. Collection: $arts.';
-    } catch (_) {}
+      _contextLoadedAt = DateTime.now();
+    } catch (e) {
+      debugPrint('AI chat: failed to load context: $e');
+    } finally {
+      _contextLoading = false;
+    }
   }
 
   void _sendMessage() async {
+    // A reply is still pending: ignore the tap and leave the typed text alone.
+    if (_isTyping) return;
     if (_controller.text.trim().isEmpty) return;
     
     final userText = _controller.text.trim();
@@ -55,7 +84,32 @@ class _AiChatScreenState extends State<AiChatScreen> {
     
     _scrollToBottom();
     
-    final response = await _aiService.askAiQuestion(userText, _context);
+    String response;
+    try {
+      final loadedAt = _contextLoadedAt;
+      if (!_contextLoading &&
+          (loadedAt == null ||
+              DateTime.now().difference(loadedAt) > _contextMaxAge)) {
+        _contextWaitAbandoned = false;
+        _contextLoad = _loadGlobalContext();
+      }
+      // Give a slow context load a fair chance, but never block the chat on it.
+      if (!_contextWaitAbandoned) {
+        try {
+          await _contextLoad.timeout(const Duration(seconds: 10));
+        } on TimeoutException {
+          _contextWaitAbandoned = true;
+          debugPrint('AI chat: context load timed out, asking without it');
+        }
+      }
+      if (!mounted) return;
+
+      response = await _aiService.askAiQuestion(userText, _context);
+    } catch (e) {
+      // _isTyping must be reset on every path, or the guard above locks the chat.
+      debugPrint('AI chat: request failed: $e');
+      response = 'Error connecting to AI advisor: $e';
+    }
     
     if (mounted) {
       setState(() {
@@ -85,7 +139,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        automaticallyImplyLeading: false,
+        // Back button only when pushed on top of another screen; as a tab there is nothing to pop.
+        automaticallyImplyLeading: Navigator.canPop(context),
         title: Column(
           children: [
             Text(

@@ -23,125 +23,179 @@ class _ScannerScreenState extends State<ScannerScreen> {
   String _statusMessage = '';
   final ImagePicker _picker = ImagePicker();
 
-  Future<void> _takePhoto() async {
-    final XFile? photo = await _picker.pickImage(
-      source: ImageSource.camera,
-      maxWidth: 1920,
-      maxHeight: 1920,
-      imageQuality: 90,
-    );
+  Future<void> _takePhoto() => _pickImage(ImageSource.camera);
 
-    if (photo != null) {
+  Future<void> _pickFromGallery() => _pickImage(ImageSource.gallery);
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? photo = await _picker.pickImage(
+        source: source,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 90,
+      );
+
+      if (photo == null || !mounted) return;
       setState(() {
         _capturedImage = File(photo.path);
         _progress = 0;
         _statusMessage = '';
       });
+    } catch (e) {
+      // Permission denied, or no camera on this device.
+      _showError(
+        'Could not open the ${source == ImageSource.camera ? 'camera' : 'gallery'}: $e',
+      );
     }
   }
 
-  Future<void> _pickFromGallery() async {
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1920,
-      maxHeight: 1920,
-      imageQuality: 90,
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.red.withValues(alpha: 0.9),
+      ),
     );
-
-    if (image != null) {
-      setState(() {
-        _capturedImage = File(image.path);
-        _progress = 0;
-        _statusMessage = '';
-      });
-    }
   }
 
   Future<void> _generate3DModel() async {
-    if (_capturedImage == null) return;
+    final image = _capturedImage;
+    if (image == null || _isGenerating) return;
 
     setState(() {
       _isGenerating = true;
       _progress = 0;
-      _statusMessage = 'Uploading image...';
+      _statusMessage = 'Uploading & creating task...';
     });
 
+    // Known before the task starts, so the task id can be stored under it.
+    final artifactId = DateTime.now().millisecondsSinceEpoch.toString();
+    String? taskId; // set once the (paid) task exists
+
     try {
-      // Create task from image
-      setState(() => _statusMessage = 'Uploading & creating task...');
-      final taskId = await TripoService.instance.createImageToModelTask(_capturedImage!);
+      taskId = await TripoService.instance.createImageToModelTask(image);
+      // Paid for from here on: keep the task id until the model is saved.
+      try {
+        await LocalStorageService.instance.saveTripoTaskId(artifactId, taskId);
+      } catch (e) {
+        debugPrint('Scanner: could not remember Tripo task $taskId: $e');
+      }
+      if (!mounted) return;
 
       setState(() {
         _progress = 15;
         _statusMessage = 'Processing... This may take a few minutes';
       });
 
-      // Poll for completion
+      // Poll for completion. Stops by itself if the screen is disposed.
       final result = await TripoService.instance.waitForTask(
         taskId,
+        isCancelled: () => !mounted,
         onProgress: (progress) {
-          if (mounted) {
-            setState(() {
-              _progress = 15 + (progress * 0.85).toInt();
-              if (progress < 30) {
-                _statusMessage = 'Analyzing artifact geometry...';
-              } else if (progress < 60) {
-                _statusMessage = 'Generating 3D mesh...';
-              } else if (progress < 85) {
-                _statusMessage = 'Applying textures...';
-              } else {
-                _statusMessage = 'Finalizing model...';
-              }
-            });
-          }
+          if (!mounted) return;
+          setState(() {
+            _progress = 15 + (progress * 0.8).toInt();
+            if (progress < 30) {
+              _statusMessage = 'Analyzing artifact geometry...';
+            } else if (progress < 60) {
+              _statusMessage = 'Generating 3D mesh...';
+            } else if (progress < 85) {
+              _statusMessage = 'Applying textures...';
+            } else {
+              _statusMessage = 'Finalizing model...';
+            }
+          });
         },
       );
+      if (!mounted) return;
 
-      if (result.isComplete && result.modelUrl != null) {
-        // Save artifact
-        final artifactId = DateTime.now().millisecondsSinceEpoch.toString();
-        final savedImagePath = await LocalStorageService.instance
-            .saveImage(_capturedImage!, artifactId);
+      final modelUrl = result.modelUrl;
+      if (modelUrl == null) {
+        throw TripoException('Tripo finished the task but returned no model.');
+      }
 
-        final artifact = ArtifactModel(
-          id: artifactId,
-          name: 'Artifact $artifactId',
-          imagePath: savedImagePath,
-          modelUrl: result.modelUrl,
-          createdAt: DateTime.now(),
-          status: 'complete',
-        );
+      setState(() {
+        _progress = 95;
+        _statusMessage = 'Saving model to device...';
+      });
 
+      // Tripo download links are temporary: store the GLB on the device first.
+      // It is the one thing that cannot be recreated without paying again.
+      String? localModelPath;
+      String? saveWarning;
+      try {
+        final path =
+            await LocalStorageService.instance.getModelSavePath(artifactId);
+        await TripoService.instance
+            .downloadTaskModel(taskId, path, knownUrl: modelUrl);
+        localModelPath = path;
+        try {
+          await LocalStorageService.instance.clearTripoTaskId(artifactId);
+        } catch (_) {}
+      } catch (e) {
+        debugPrint('Scanner: could not save the model locally: $e');
+        saveWarning = 'The model is ready but could not be saved to the '
+            'device yet. Open it and tap "Save to device". ($e)';
+      }
+
+      var savedImagePath = image.path;
+      try {
+        savedImagePath =
+            await LocalStorageService.instance.saveImage(image, artifactId);
+      } catch (e) {
+        debugPrint('Scanner: could not copy the photo: $e');
+      }
+
+      final artifact = ArtifactModel(
+        id: artifactId,
+        name: 'Artifact $artifactId',
+        imagePath: savedImagePath,
+        modelUrl: modelUrl,
+        localModelPath: localModelPath,
+        // Without a saved model the viewer can still recover it from the task.
+        tripoTaskId: localModelPath == null ? taskId : null,
+        createdAt: DateTime.now(),
+        status: 'complete',
+      );
+
+      try {
         await LocalStorageService.instance.saveArtifact(artifact);
-
-        if (mounted) {
-          setState(() {
-            _isGenerating = false;
-            _progress = 100;
-            _statusMessage = 'Model ready!';
-          });
-
-          // Navigate to viewer
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ModelViewerScreen(artifact: artifact),
-            ),
-          );
-        }
+      } catch (e) {
+        // The model is already on the device: bookkeeping must not lose it.
+        debugPrint('Scanner: could not save the artifact record: $e');
       }
+      if (!mounted) return;
+
+      setState(() {
+        _isGenerating = false;
+        _progress = 100;
+        _statusMessage = 'Model ready!';
+      });
+
+      if (saveWarning != null) _showError(saveWarning);
+
+      // Navigate to viewer
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ModelViewerScreen(artifact: artifact),
+        ),
+      );
+    } on TripoCancelledException {
+      // The screen was closed while waiting: nothing to update.
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isGenerating = false;
-          _statusMessage = '';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: AppColors.red.withValues(alpha: 0.9),
-          ),
-        );
-      }
+      if (!mounted) return;
+      setState(() {
+        _isGenerating = false;
+        _statusMessage = '';
+      });
+      // After the task was created the user pays for it even if waiting fails:
+      // show the id so the result can be found in the Tripo dashboard.
+      final started = taskId;
+      _showError(started == null
+          ? 'Error: ${e.toString()}'
+          : 'Error: ${e.toString()} (Tripo task $started)');
     }
   }
 

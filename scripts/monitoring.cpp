@@ -11,6 +11,9 @@
 #define SUPABASE_URL   "https://wvhdhfddtusppjmsgmvn.supabase.co/rest/v1/sensor_data"
 #define SUPABASE_KEY   "sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln"
 
+#define WIFI_CONNECT_TIMEOUT_MS     15000  // setup(): stop waiting for WiFi after 15 s and continue offline
+#define WIFI_RECONNECT_INTERVAL_MS  10000  // loop(): retry a dropped WiFi connection at most every 10 s
+
 #define GAS_PIN   34
 #define DHT_PIN   26
 #define SDA_PIN   21
@@ -18,6 +21,10 @@
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 DHT dht(DHT_PIN, DHT11);
+
+// Time of the last WiFi reconnect attempt. setup() starts the clock when it ends, so loop() does not
+// call WiFi.reconnect() at once and interrupt a connection that is still being established.
+static unsigned long lastReconnectAttempt = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -33,18 +40,35 @@ void setup() {
   display.setCursor(0, 0); display.print("Connecting WiFi...");
   display.display();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
-  Serial.println("\nWiFi OK: " + WiFi.localIP().toString());
+  // Wait for the connection, but not forever: without WiFi the sensors are still shown offline
+  unsigned long wifiStart = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < WIFI_CONNECT_TIMEOUT_MS) {
+    delay(500);
+    Serial.print(".");
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi OK: " + WiFi.localIP().toString());
+  } else {
+    Serial.println("\nWiFi connect timed out, continuing in offline mode");
+  }
+  lastReconnectAttempt = millis();
 }
 
 void loop() {
+  // Restore a dropped WiFi connection (does not block, at most one attempt per interval)
+  if (WiFi.status() != WL_CONNECTED && millis() - lastReconnectAttempt >= WIFI_RECONNECT_INTERVAL_MS) {
+    lastReconnectAttempt = millis();
+    Serial.println("WiFi lost, reconnecting...");
+    WiFi.reconnect();
+  }
+
   float temp = dht.readTemperature();
   float hum  = dht.readHumidity();
 
   // Gas sensor
   long sum = 0;
   for (int i = 0; i < 8; i++) { sum += analogRead(GAS_PIN); delay(5); }
-  float ppm = sum / 8;
+  float ppm = sum / 8.0f;  // sum is long: plain "/ 8" would truncate the average
 
   bool dhtOk = !isnan(temp) && !isnan(hum);
 
@@ -94,6 +118,15 @@ void loop() {
 
     int code = http.POST(body);
     Serial.printf("[Supabase] %d | %s\n", code, body.c_str());
+    if (code < 200 || code >= 300) {
+      if (code < 0) {
+        // Negative values are HTTPClient transport errors (no connection, timeout, ...), not HTTP statuses
+        Serial.printf("[Supabase] ERROR: request failed: %s\n", http.errorToString(code).c_str());
+      } else {
+        // Non-2xx HTTP status: show the server's answer (RLS, auth or schema problems appear here)
+        Serial.printf("[Supabase] ERROR: HTTP %d: %s\n", code, http.getString().c_str());
+      }
+    }
     http.end();
   }
 
