@@ -1,0 +1,24 @@
+# ArchoAI server: copies data both ways between this Pi and the Supabase cloud project (see server/README.md).
+# Started every 2 minutes by archoai-replicate.timer. Template: server/setup.sh replaces @REPO@ and @USER@
+# and installs it into /etc/systemd/system. It does nothing until server/replica.env exists.
+[Unit]
+Description=ArchoAI server: replicate data between the Pi and the cloud project
+Documentation=file://@REPO@/server/README.md
+After=archoai-supabase.service network-online.target
+Wants=network-online.target
+ConditionPathExists=@REPO@/server/replica.env
+
+[Service]
+Type=oneshot
+User=@USER@
+WorkingDirectory=@REPO@
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 @REPO@/server/replicate.py
+# A big model file over a slow link can take a while; the next timer run waits for this one.
+TimeoutStartSec=30min
+Nice=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+# The state (watermarks) lives in /var/lib/archoai (STATE_DIRECTORY), owned by the service user.
+StateDirectory=archoai

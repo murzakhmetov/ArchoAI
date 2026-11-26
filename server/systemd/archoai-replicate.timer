@@ -1,0 +1,13 @@
+# ArchoAI server: runs archoai-replicate.service two minutes after boot and every two minutes after it ran.
+# Template: server/setup.sh installs it into /etc/systemd/system.
+[Unit]
+Description=ArchoAI server: replicate data between the Pi and the cloud project every 2 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=10s
+Unit=archoai-replicate.service
+
+[Install]
+WantedBy=timers.target

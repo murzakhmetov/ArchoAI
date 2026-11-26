@@ -21,6 +21,10 @@
 # Environment
 .env
 *.env
+server/replica.env
+server/.replica_state.json
+server/.replica_state.json.tmp
+server/.replica_state.json.lock
 
 # Archives
 *.zip

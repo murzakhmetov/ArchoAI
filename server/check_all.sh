@@ -99,6 +99,7 @@ step "server API: ESP32, scanner and app contracts" "$PY" -B -m unittest discove
 step "scanner end to end (withbutton*.py)"         "$PY" -B -m unittest discover -s "$REPO/server/tests" -p test_scan_pipeline.py
 step "crack detection API (main.py)"               "$PY" -B -m unittest discover -s "$REPO/server/tests" -p test_crack_api.py
 step "backup and restore"                          "$PY" -B -m unittest discover -s "$REPO/server/tests" -p test_backup.py
+step "replicator cloud <-> Pi (fake servers)"       "$PY" -B -m unittest discover -s "$REPO/server/tests" -p "test_replicate*.py"
 step "database policies (supabase/tests/smoke.sh)" bash "$REPO/supabase/tests/smoke.sh"
 step "migrations describe the database (drift)"   python3 "$REPO/supabase/tests/migration_drift.py"
 step "web UI (web-deepcrack)"                      web_ui

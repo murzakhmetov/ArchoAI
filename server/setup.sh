@@ -7,7 +7,9 @@
 #   1. supabase/.env      random secrets of the stack, created once and never overwritten;
 #   2. Docker             network "archoai_supabase": container ports are published on 127.0.0.1 only;
 #   3. systemd            archoai-supabase.service starts the stack at boot,
-#                         archoai-api-lan.service forwards port 54321 (all interfaces) to the API;
+#                         archoai-api-lan.service forwards port 54321 (all interfaces) to the API,
+#                         archoai-replicate.timer runs the cloud replicator every 2 minutes (inert
+#                         until server/replica.env exists, see server/README.md);
 #   4. archoai_app/.env   SUPABASE_URL and SUPABASE_KEY of this Pi, for the app and the scripts.
 #
 # Then copy the printed address and key into monitoring.cpp (ESP32) if they changed.
@@ -60,15 +62,16 @@ if [ ! -f /etc/docker/daemon.json ]; then
 fi
 
 echo "== 3/4 systemd services"
-for unit in archoai-supabase archoai-api-lan; do
-  sed -e "s|@REPO@|$REPO|g" -e "s|@USER@|$RUN_USER|g" "$REPO/server/systemd/$unit.service" \
-    | sudo tee "/etc/systemd/system/$unit.service" >/dev/null
+for unit in archoai-supabase.service archoai-api-lan.service archoai-replicate.service archoai-replicate.timer; do
+  sed -e "s|@REPO@|$REPO|g" -e "s|@USER@|$RUN_USER|g" "$REPO/server/systemd/$unit" \
+    | sudo tee "/etc/systemd/system/$unit" >/dev/null
 done
 sudo systemctl daemon-reload
 sudo systemctl enable --now archoai-api-lan.service >/dev/null
+sudo systemctl enable --now archoai-replicate.timer >/dev/null
 echo "   starting the stack (the first start downloads about 2.5 GB of images)..."
 sudo systemctl enable --now archoai-supabase.service >/dev/null
-systemctl is-active archoai-supabase.service archoai-api-lan.service | paste -sd' ' | sed 's/^/   services: /'
+systemctl is-active archoai-supabase.service archoai-api-lan.service archoai-replicate.timer | paste -sd' ' | sed 's/^/   services: /'
 
 echo "== 4/4 archoai_app/.env"
 LAN_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')"
