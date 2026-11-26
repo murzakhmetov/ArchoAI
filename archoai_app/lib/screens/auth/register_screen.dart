@@ -32,14 +32,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await SupabaseService.instance.signUp(
+      final response = await SupabaseService.instance.signUp(
         _emailController.text.trim(),
         _passwordController.text,
       );
       if (mounted) {
+        // The server on the Raspberry Pi confirms new accounts at once and sends no e-mail: the
+        // response then carries a session and the user is already signed in.
+        final signedIn = response.session != null;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Account created! Check your email for verification.'),
+            content: Text(signedIn
+                ? 'Account created! You are signed in.'
+                : 'Account created! Check your email for verification.'),
             backgroundColor: AppColors.mint.withValues(alpha: 0.9),
           ),
         );

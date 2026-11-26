@@ -17,15 +17,17 @@ function App() {
   const [width, setImgWidth] = useState(1);
   const [height, setImgHeight] = useState(1);
   const [unit, setImgUnit] = useState('m');
+  const [error, setError] = useState('');
 
   const changeHandler = (event) => {
-      setSelectedFile(event.target.files[0]);
-      setIsFilePicked(true);
-      if (event.target.files && event.target.files[0]) {
-        setSrcUrl(
-          URL.createObjectURL(event.target.files[0])
-        );
-}
+      // Empty when the user cancels the file dialog
+      const file = (event.target.files && event.target.files[0]) || null;
+      setSelectedFile(file);
+      setIsFilePicked(file !== null);
+      setError('');
+      if (file) {
+        setSrcUrl(URL.createObjectURL(file));
+      }
   };
   const setWidth = (event) => {
     setImgWidth(event.target.value)
@@ -38,6 +40,11 @@ function App() {
   }
   const handleSubmit = event => {
     event.preventDefault();
+    if (!isFilePicked) {
+      setError('Choose an image first.');
+      return;
+    }
+    setError('');
     const formData = new FormData();
     formData.append(
       "file",
@@ -51,8 +58,16 @@ function App() {
       //headers: { 'Content-Type': 'multipart/form-data' }, // DO NOT INCLUDE HEADERS
       body: formData,
   };
-    fetch('http://127.0.0.1:8000/predict/'+width+'-' + height +'/' + unit, requestOptions)
-    .then(response => response.json())//.blob())
+    fetch('http://127.0.0.1:8000/predict/'+width+'-' + height +'/' + encodeURIComponent(unit), requestOptions)
+    .then(async response => {
+      const data = await response.json().catch(() => null);
+      // A refusal (bad size or unit, not an image, too large) is {detail: "..."}, not a list of images
+      if (!response.ok || !Array.isArray(data)) {
+        const detail = data && typeof data.detail === 'string' ? data.detail : null;
+        throw new Error(detail || 'The server answered with status ' + response.status);
+      }
+      return data;
+    })
     .then(data => {
       console.log(data)
         setPredUrl("data:image/png;base64,"+data[0]);
@@ -63,7 +78,10 @@ function App() {
         setSide4Url("data:image/png;base64,"+data[5]);
         setSide5Url("data:image/png;base64,"+data[6]);
     })
-    .catch((err) => console.log(err));
+    .catch((err) => {
+      console.log(err);
+      setError('Prediction failed: ' + err.message);
+    });
   }
   return (  <div className="d-flex">
       <div className="card mx-5">
@@ -84,6 +102,7 @@ function App() {
             <Form.Control type="text" placeholder="some unit" onChange={setUnit}/>
           </Form.Group>
             <Button variant="primary" type="submit">Predict</Button>
+            {error && <div className="alert alert-danger mt-3" role="alert">{error}</div>}
           </Form>
         </div>
       </div>

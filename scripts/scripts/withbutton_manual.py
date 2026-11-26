@@ -12,7 +12,7 @@ from google.genai import types
 from util.inference_utils import create_model, inference
 from main import Parameters
 from tripo_client import TripoClient, TripoError
-from supabase_models import store_model, clamp_crack_percentage
+from supabase_models import store_model, clamp_crack_percentage, resolve_supabase_url
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', 'archoai_app', '.env'))
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', 'archoai_app', '.env'))
@@ -23,14 +23,29 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
-PROJECT_REF = os.getenv("SUPABASE_PROJECT_REF")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+# Сервер базы данных и хранилища: Supabase на Raspberry Pi (SUPABASE_URL, например
+# http://192.168.1.61:54321, см. server/README.md). Нужен сетевой адрес Pi, а не 127.0.0.1: ссылки на
+# фото и модели сохраняются в базе и должны открываться на телефоне. SUPABASE_PROJECT_REF без
+# SUPABASE_URL по-прежнему означает облачный проект Supabase.
+SUPABASE_URL = resolve_supabase_url()
+SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or "").strip()
 BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "artifact-images")
 MODEL_BUCKET_NAME = os.getenv("SUPABASE_MODEL_BUCKET_NAME", "3d1")
 
-SUPABASE_DB_URL = f"https://{PROJECT_REF}.supabase.co/rest/v1/artifacts"
-SUPABASE_STORAGE_URL = f"https://{PROJECT_REF}.supabase.co/storage/v1/object/{BUCKET_NAME}"
-SUPABASE_MODEL_STORAGE_URL = f"https://{PROJECT_REF}.supabase.co/storage/v1/object/{MODEL_BUCKET_NAME}"
+if SUPABASE_URL is None or not SUPABASE_KEY:
+    raise SystemExit(
+        "Не задан адрес сервера или ключ: укажите SUPABASE_URL (например http://192.168.1.61:54321) "
+        "и SUPABASE_KEY (publishable key сервера) в archoai_app/.env"
+    )
+
+SUPABASE_DB_URL = f"{SUPABASE_URL}/rest/v1/artifacts"
+SUPABASE_STORAGE_URL = f"{SUPABASE_URL}/storage/v1/object/{BUCKET_NAME}"
+
+# Номер веб-камеры зависит от компьютера (одна USB-камера на Raspberry Pi это 0): доступные номера
+# показывает check_camera.py. Задаётся через CAMERA_INDEX в .env или в окружении: номер (0, 1, ...) или путь
+# устройства, например /dev/v4l/by-id/usb-...-video-index0 (не меняется при переподключении камеры).
+_CAMERA_SETTING = (os.getenv("CAMERA_INDEX") or "").strip()
+CAMERA_INDEX = int(_CAMERA_SETTING) if _CAMERA_SETTING.isdigit() else (_CAMERA_SETTING or 2)
 
 print("Инициализация API клиента Gemini и локальной ML модели...")
 client = genai.Client(api_key=GEMINI_API_KEY)
@@ -55,11 +70,14 @@ def capture_single_photo(cap, index, total):
 
 def capture_images_manually(count=4):
     print(f"\n[1/5] Включение веб-камеры. Требуется {count} ракурса.")
-    cap = cv2.VideoCapture(2, cv2.CAP_V4L2)
+    cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_V4L2)
     if not cap.isOpened():
-        cap = cv2.VideoCapture(2)
+        cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
-        raise Exception("Не удалось открыть веб-камеру")
+        raise Exception(
+            f"Не удалось открыть веб-камеру с номером {CAMERA_INDEX}. "
+            "Найдите номер через check_camera.py и задайте CAMERA_INDEX в .env"
+        )
 
     photos = []
     for i in range(count):
@@ -104,7 +122,7 @@ def upload_to_supabase_storage(image_bytes):
     if response.status_code not in [200, 201]:
         raise Exception(f"Ошибка загрузки в Storage (Код {response.status_code}): {response.text}")
 
-    public_url = f"https://{PROJECT_REF}.supabase.co/storage/v1/object/public/{BUCKET_NAME}/{file_name}"
+    public_url = f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET_NAME}/{file_name}"
     print(f"Фото успешно загружено. Ссылка: {public_url}")
     return public_url
 
@@ -220,7 +238,7 @@ def generate_3d_model_with_tripo(images_bytes_list):
         # fallback_bucket работает только если на проекте нет RPC выбора бакетов (старый проект без миграций).
         # Если хранилище заполнено или бакет отказал в загрузке, модель не сохраняется: квота общая для всех бакетов.
         stored = store_model(
-            glb_bytes, PROJECT_REF, SUPABASE_KEY, tripo_task_id=task_id, fallback_bucket=MODEL_BUCKET_NAME
+            glb_bytes, SUPABASE_URL, SUPABASE_KEY, tripo_task_id=task_id, fallback_bucket=MODEL_BUCKET_NAME
         )
         if stored is not None:
             print(f"3D модель сохранена в Supabase Storage (бакет '{stored.bucket_id}')!\nПубличная ссылка: {stored.url}")
@@ -294,7 +312,10 @@ def save_all_to_supabase(gemini_data, image_url, model_url=None):
     response = requests.post(SUPABASE_DB_URL, headers=headers, json=final_payload, timeout=60)
 
     if response.status_code in [200, 201]:
-        print("\nУСПЕХ! Все данные, фото и 3D-модель сохранены в Supabase!")
+        if model_url:
+            print("\nУСПЕХ! Данные, фото и 3D-модель сохранены на сервере!")
+        else:
+            print("\nУСПЕХ! Данные и фото сохранены на сервере (3D-модель не создана).")
     else:
         print(f"\nОшибка Supabase при записи строки (Код {response.status_code}): {response.text}")
 

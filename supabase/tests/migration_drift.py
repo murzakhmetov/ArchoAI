@@ -14,10 +14,11 @@ one whose name appears in no migration file.
 
 Not covered: columns added by hand, auto-named indexes and constraints, and table data.
 
-    python supabase/tests/migration_drift.py [--ref <project ref>]
+    python supabase/tests/migration_drift.py                # the server on this Raspberry Pi
+    python supabase/tests/migration_drift.py --ref <ref>    # a Supabase cloud project (logged-in CLI)
 
-Needs a logged-in Supabase CLI. Exit code 0 = no drift, 1 = drift or error. While it runs, the tables
-are locked for a moment (inserts wait, nothing is lost).
+Exit code 0 = no drift, 1 = drift or error. While it runs, the tables are locked for a moment
+(inserts wait, nothing is lost).
 """
 import argparse
 import json
@@ -31,7 +32,6 @@ import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent
 MIGRATIONS = HERE.parent / "migrations"
-DEFAULT_REF = "wvhdhfddtusppjmsgmvn"
 
 NOT_EXT = "not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')"
 GRANTEE = "case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end"
@@ -94,9 +94,16 @@ INVENTORY = (
 
 
 def query(cli: str, ref: str, sql: str = None, sql_file: pathlib.Path = None):
-    """Runs one statement through `supabase db query` and returns the parsed JSON row, or None."""
-    command = [cli, "db", "query", "--linked", "--project-ref", ref]
-    command += ["-f", str(sql_file)] if sql_file else [sql]
+    """Runs one statement through `supabase db query` and returns the parsed JSON row, or None.
+
+    ``ref`` None means the local stack (the Pi), otherwise the cloud project with that ref."""
+    if ref:
+        command = [cli, "db", "query", f"--remote={ref}"] + (["-f", str(sql_file)] if sql_file else [sql])
+    else:
+        # The CLI sends local SQL as one prepared statement, which cannot hold the multi-statement
+        # chain; local_sql.py runs it in one session and prints the same JSON shape.
+        text = sql_file.read_text(encoding="utf-8") if sql_file else sql
+        command = [sys.executable, str(HERE / "local_sql.py"), text]
     done = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
     out = done.stdout + done.stderr
     start = out.find("{")
@@ -170,7 +177,8 @@ rollback;
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--ref", default=os.environ.get("REF", DEFAULT_REF), help="project ref")
+    parser.add_argument("--ref", default=os.environ.get("REMOTE") or os.environ.get("REF"),
+                        help="cloud project ref (default: the local stack on this Pi)")
     args = parser.parse_args()
 
     cli = shutil.which("supabase")
@@ -186,7 +194,7 @@ def main() -> int:
         sql_file = pathlib.Path(tmp) / "drift.sql"
         with open(sql_file, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(build_sql(files))
-        print(f"target project: {args.ref} | {len(files)} migration files re-applied in one rolled-back transaction")
+        print(f"target: {args.ref or 'local stack on this Pi'} | {len(files)} migration files re-applied in one rolled-back transaction")
         row = query(cli, args.ref, sql_file=sql_file)
     if row is None:
         return 1
