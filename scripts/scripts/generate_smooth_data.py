@@ -5,22 +5,28 @@ import random
 from datetime import datetime, timedelta
 import os
 import sys
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
+from supabase_models import resolve_supabase_url
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 # Load credentials. The app's .env lives at <repo>/archoai_app/.env. This script sits in
 # <repo>/scripts/scripts/, so the first path is the right one; the second one is kept for a
 # flat layout where the script is placed directly in <repo>/scripts/.
 for env_path in (
-    os.path.join(os.path.dirname(__file__), '..', '..', 'archoai_app', '.env'),
-    os.path.join(os.path.dirname(__file__), '..', 'archoai_app', '.env'),
+    os.path.join(HERE, '..', '..', 'archoai_app', '.env'),
+    os.path.join(HERE, '..', 'archoai_app', '.env'),
 ):
     load_dotenv(env_path)
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
+# The server: SUPABASE_URL (the Raspberry Pi, http://<pi address>:54321) or a cloud SUPABASE_PROJECT_REF.
+SUPABASE_URL = resolve_supabase_url()
 # This script writes created_at and 144 rows at once. The publishable (anon) key may only insert the
 # three sensor columns, one row per 2 seconds, so it needs a secret key. Pass it through the SHELL
 # environment (SUPABASE_SERVICE_KEY), never through archoai_app/.env: that file is bundled into the app.
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+# On the Raspberry Pi server the secret key is read from supabase/.env (ARCHOAI_SECRET_KEY, git-ignored).
+SERVER_SECRET_KEY = dotenv_values(os.path.join(HERE, '..', '..', 'supabase', '.env')).get("ARCHOAI_SECRET_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or SERVER_SECRET_KEY or os.getenv("SUPABASE_KEY")
 DB_URL = f"{SUPABASE_URL}/rest/v1/sensor_data"
 
 headers = {
@@ -77,7 +83,7 @@ def generate_beautiful_data(num_points=144): # 24 hours with 10 min steps
         else:
             print(f"Error: {response.status_code}")
             print(response.text)
-            if response.status_code in (401, 403) and not os.getenv("SUPABASE_SERVICE_KEY"):
+            if response.status_code in (401, 403) and not (os.getenv("SUPABASE_SERVICE_KEY") or SERVER_SECRET_KEY):
                 print("Hint: the publishable key cannot write created_at or bulk rows. Set SUPABASE_SERVICE_KEY "
                       "in your shell (a secret key, not in archoai_app/.env) and run the script again.")
                 return False

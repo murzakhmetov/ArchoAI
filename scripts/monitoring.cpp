@@ -6,10 +6,16 @@
 #include <HTTPClient.h>
 
 // === Config ===
+// The board must join the same Wi-Fi network as the Raspberry Pi, which is the server now
+// (database and storage on the Pi, see server/README.md).
 #define WIFI_SSID      "HONOR X8d"
 #define WIFI_PASSWORD  "Alikhan12345"
-#define SUPABASE_URL   "https://wvhdhfddtusppjmsgmvn.supabase.co/rest/v1/sensor_data"
-#define SUPABASE_KEY   "sb_publishable_rHDFfoFz_v9zDNKk9o64Gw_Pc-eZvln"
+// ArchoAI server on the Raspberry Pi: http://<pi address>:54321 (server/setup.sh prints it).
+// Give the Pi a fixed address in the router (DHCP reservation), otherwise it can change.
+#define SUPABASE_URL   "http://192.168.1.61:54321/rest/v1/sensor_data"
+// Publishable key of the Pi server (SUPABASE_KEY in archoai_app/.env). It only allows sensor
+// readings within the value ranges, at most one every 2 seconds.
+#define SUPABASE_KEY   "sb_publishable_D4bdWy0AwSGBhrBZfSrLAg_ZT9AKlWY"
 
 #define WIFI_CONNECT_TIMEOUT_MS     15000  // setup(): stop waiting for WiFi after 15 s and continue offline
 #define WIFI_RECONNECT_INTERVAL_MS  10000  // loop(): retry a dropped WiFi connection at most every 10 s

@@ -1,0 +1,27 @@
+# ArchoAI server: lets phones and the ESP32 reach the API gateway, and nothing else.
+# Docker publishes every container port on 127.0.0.1 only; this forwards port 54321 of all network
+# interfaces to the gateway (supabase/config.toml, [api] port = 54331). The database port is not
+# forwarded. Template: server/setup.sh installs it into /etc/systemd/system.
+[Unit]
+Description=ArchoAI server: network access to the API (port 54321 -> 127.0.0.1:54331)
+Documentation=file://@REPO@/server/README.md
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/socat TCP-LISTEN:54321,fork,reuseaddr,backlog=64,keepalive TCP:127.0.0.1:54331,keepalive
+Restart=always
+RestartSec=2
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

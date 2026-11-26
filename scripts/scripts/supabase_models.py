@@ -1,7 +1,11 @@
 """Store generated GLB models in the batched Supabase Storage buckets.
 
-The project keeps models in buckets ``models-01`` .. ``models-04`` (225 MB soft capacity each, 50 MiB per file,
-filled in order).
+The server is the Supabase stack on the Raspberry Pi (``SUPABASE_URL``, for example
+``http://192.168.1.61:54321``, see server/README.md); a Supabase cloud project still works with its
+URL or bare project ref.  ``resolve_supabase_url`` turns the configuration into the base URL.
+
+The project keeps models in buckets ``models-01`` .. ``models-04`` (a soft capacity each, 50 MiB per
+file, filled in order).
 The server decides which bucket gets the next file (RPC ``pick_model_bucket``), and every stored file
 is recorded for usage accounting (RPC ``register_model_file``).  Buckets do not add capacity: the
 free quota is shared, so a refusal always means "full" and ends the attempt.  There is one exception:
@@ -25,14 +29,23 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Mapping, Optional, Tuple
+from urllib.parse import urlsplit
 
 import requests
 
-__all__ = ["MAX_MODEL_BYTES", "StoredModel", "clamp_crack_percentage", "store_model"]
+__all__ = [
+    "MAX_MODEL_BYTES",
+    "StoredModel",
+    "clamp_crack_percentage",
+    "normalize_base_url",
+    "resolve_supabase_url",
+    "store_model",
+]
 
 MAX_MODEL_BYTES = 52428800  # 50 MiB: the size limit of every models-NN bucket
 
@@ -49,6 +62,55 @@ _OBJECT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,198}[.]glb$")
 # Bucket ids and the project ref end up in URLs: accept plain identifiers only.
 _BUCKET_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,62}")
 _PROJECT_REF_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,62}")
+# Host part of a server URL: a DNS name, an IPv4 address or a bracketed IPv6 address.
+_HOST_RE = re.compile(r"[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]{2,45}\]")
+
+
+def normalize_base_url(value: Any) -> Optional[str]:
+    """Base URL of a Supabase API, or ``None`` if ``value`` is not usable.
+
+    Accepts a full http(s) URL (``http://192.168.1.61:54321``, a path prefix of a reverse proxy is
+    kept, a trailing slash is dropped) or a bare cloud project ref (``abcd...`` becomes
+    ``https://abcd....supabase.co``).  URLs with credentials, a query, a fragment, whitespace or a
+    port outside 1..65535 are refused: the result is put in front of every request path.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value  # strict: resolve_supabase_url trims what it reads from the environment
+    if not text or any(ch.isspace() or ord(ch) < 32 or ord(ch) > 126 for ch in text):
+        return None
+    if "://" not in text:
+        return f"https://{text}.supabase.co" if _PROJECT_REF_RE.fullmatch(text) else None
+    try:
+        parts = urlsplit(text)
+        port = parts.port
+    except ValueError:
+        return None
+    if parts.scheme.lower() not in ("http", "https") or parts.query or parts.fragment or "#" in text:
+        return None
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
+        return None
+    host = parts.netloc.rsplit(":", 1)[0] if port is not None else parts.netloc
+    if not _HOST_RE.fullmatch(host) or (port is not None and not 1 <= port <= 65535):
+        return None
+    path = parts.path.rstrip("/")
+    return f"{parts.scheme.lower()}://{parts.netloc}{path}"
+
+
+def resolve_supabase_url(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
+    """The Supabase server the scripts talk to, from ``SUPABASE_URL`` or ``SUPABASE_PROJECT_REF``.
+
+    ``SUPABASE_URL`` wins (the Raspberry Pi server: ``http://<pi address>:54321``).  Use the Pi's
+    network address, not 127.0.0.1: the public links that the scripts store in the database must
+    also open on the phones.  ``SUPABASE_PROJECT_REF`` alone still means a Supabase cloud project.
+    Returns ``None`` when neither gives a usable URL.
+    """
+    env = os.environ if env is None else env
+    url = (env.get("SUPABASE_URL") or "").strip()
+    if url:
+        return normalize_base_url(url)
+    ref = (env.get("SUPABASE_PROJECT_REF") or "").strip()
+    return normalize_base_url(ref) if ref and "://" not in ref else None
 
 
 @dataclass
@@ -215,7 +277,7 @@ def _register(http: Any, base: str, payload: dict, headers: dict, timeout: float
 
 def store_model(
     glb_bytes: bytes,
-    project_ref: str,
+    base_url: str,
     api_key: str,
     tripo_task_id: Optional[str] = None,
     fallback_bucket: Optional[str] = "3d1",
@@ -226,7 +288,8 @@ def store_model(
 ) -> Optional[StoredModel]:
     """Upload a GLB model to Supabase Storage and return where it is, or ``None`` if it was not stored.
 
-    ``session`` is any object with a requests-style ``post(url, headers=..., json=... | data=...,
+    ``base_url`` is the server (``http://<pi address>:54321``, see ``resolve_supabase_url``) or a bare
+    cloud project ref.  ``session`` is any object with a requests-style ``post(url, headers=..., json=... | data=...,
     timeout=...)``; by default a ``requests.Session`` is used.  ``log`` receives one line at a time.
     ``fallback_bucket`` (``None`` for none) is used only when the bucket RPC does not exist at all
     (HTTP 404, PostgREST ``PGRST202`` / ``42883``: an old project without the migrations).  Every other
@@ -244,8 +307,9 @@ def store_model(
     if size > MAX_MODEL_BYTES:
         _say(log, f"[Supabase] Модель не сохранена: размер {size} байт больше лимита {MAX_MODEL_BYTES} байт (50 МБ).")
         return None
-    if not isinstance(project_ref, str) or not _PROJECT_REF_RE.fullmatch(project_ref):
-        _say(log, "[Supabase] Модель не сохранена: SUPABASE_PROJECT_REF не задан или записан неверно.")
+    base = normalize_base_url(base_url)
+    if base is None:
+        _say(log, "[Supabase] Модель не сохранена: SUPABASE_URL (адрес сервера) не задан или записан неверно.")
         return None
     if not _usable_key(api_key):
         _say(log, "[Supabase] Модель не сохранена: ключ Supabase не задан или содержит недопустимые символы.")
@@ -261,7 +325,6 @@ def store_model(
         _say(log, "[Supabase] Модель не сохранена: недопустимое имя файла.")
         return None
 
-    base = f"https://{project_ref}.supabase.co"
     auth = {"apikey": api_key, "Authorization": f"Bearer {api_key}"}
     json_headers = dict(auth, **{"Content-Type": "application/json"})
     upload_headers = dict(auth, **{"Content-Type": "model/gltf-binary"})

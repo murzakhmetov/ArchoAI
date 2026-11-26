@@ -2,29 +2,41 @@
 # Smoke tests for the Supabase setup. Every check runs inside a transaction that is rolled back, so
 # nothing is left behind (storage rows are inserted straight into storage.objects inside that
 # transaction: this tests the POLICIES, not the Storage API). Each check creates the rows it needs, so
-# it also works on an empty project. Needs a logged-in Supabase CLI.
+# it also works on an empty project.
 #
-#   REF=<project ref> bash supabase/tests/smoke.sh
+#   bash supabase/tests/smoke.sh                 # the server on this Raspberry Pi (local stack)
+#   REMOTE=<project ref> bash supabase/tests/smoke.sh   # a Supabase cloud project instead (logged-in CLI;
+#                                                       # the CLI asks before it runs statements there)
 #
 # One CLI call per check: a full run takes several minutes. Do not run other `supabase db query`
 # commands at the same time (the CLI logs in with a temporary role per call and calls can collide;
 # the script retries such a collision a few times).
 # Prints PASS or FAIL per check and exits non-zero if anything failed or could not run.
 
-REF="${REF:-wvhdhfddtusppjmsgmvn}"
+REMOTE="${REMOTE:-${REF:-}}"   # REF=<ref> is the older name of REMOTE
+TARGET=()
+[ -n "$REMOTE" ] && TARGET=("--remote=$REMOTE")
 fail=0
 
-if ! command -v supabase >/dev/null 2>&1; then
+if [ -n "$REMOTE" ] && ! command -v supabase >/dev/null 2>&1; then
   echo "FAIL  the supabase CLI is not on PATH"
   exit 2
 fi
-echo "target project: $REF"
+if [ -z "$REMOTE" ] && ! python3 -c 'import psycopg' 2>/dev/null; then
+  echo "FAIL  python3-psycopg is missing (sudo apt install python3-psycopg)"
+  exit 2
+fi
+echo "target: ${REMOTE:-local stack on this Pi}"
 
 # Runs SQL through the Management API. Success output contains a "rows" key, an error contains "_tag".
 run() {
   local out attempt=0
   while true; do
-    out="$(supabase db query --linked --project-ref "$REF" "$1" 2>&1)"
+    if [ -n "$REMOTE" ]; then
+      out="$(supabase db query "${TARGET[@]}" "$1" 2>&1)"
+    else
+      out="$(python3 "$(dirname "${BASH_SOURCE[0]}")/local_sql.py" "$1" 2>&1)"
+    fi
     if echo "$out" | grep -qE 'DbConfigConnectTempRoleError|cli_login_postgres' && [ "$attempt" -lt 3 ]; then
       attempt=$((attempt + 1)); sleep 4; continue
     fi

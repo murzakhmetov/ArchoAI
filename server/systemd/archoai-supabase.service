@@ -1,0 +1,27 @@
+# ArchoAI server: the Supabase stack (database, file storage, auth, REST, realtime) on this Pi.
+# Template: server/setup.sh replaces @REPO@ and @USER@ and installs it into /etc/systemd/system.
+[Unit]
+Description=ArchoAI server: local Supabase stack (database, storage, auth, realtime)
+Documentation=file://@REPO@/server/README.md
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=@USER@
+SupplementaryGroups=docker
+WorkingDirectory=@REPO@
+Environment=SUPABASE_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1
+# Container ports are published on 127.0.0.1 only (network option host_binding_ipv4). The network
+# survives restarts; it is created again here in case somebody removed it.
+ExecStartPre=/bin/sh -c 'docker network inspect archoai_supabase >/dev/null 2>&1 || docker network create -o com.docker.network.bridge.host_binding_ipv4=127.0.0.1 archoai_supabase'
+ExecStart=/usr/bin/supabase start --network-id archoai_supabase -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector,supavisor
+# Keeps the data: the database and the files live in Docker volumes that only "--no-backup" deletes.
+ExecStop=/usr/bin/supabase stop
+TimeoutStartSec=900
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target

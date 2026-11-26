@@ -121,7 +121,7 @@ def happy_session(bucket="models-01"):
 def run(session, data=GLB, **kwargs):
     """store_model with a frozen clock and a collecting logger; returns (result, log lines)."""
     logs = []
-    kwargs.setdefault("project_ref", REF)
+    kwargs.setdefault("base_url", REF)
     kwargs.setdefault("api_key", KEY)
     with mock.patch.object(supabase_models, "time", mock.Mock(time=lambda: NOW + 0.9)):
         stored = store_model(data, session=session, log=logs.append, **kwargs)
@@ -460,9 +460,9 @@ class InputTests(unittest.TestCase):
     def test_unusable_project_ref_or_key_is_refused_without_any_request(self):
         bad_refs = (None, "", "x.evil.example/", "a b", "ref/../", "ref#", "ref@evil.example", "ref\n", 5)
         for ref in bad_refs:
-            with self.subTest(project_ref=ref):
+            with self.subTest(base_url=ref):
                 session = FakeSession()
-                stored, _ = run(session, project_ref=ref)
+                stored, _ = run(session, base_url=ref)
                 self.assertIsNone(stored)
                 self.assertEqual(session.calls, [])
         for key in (None, "", "key with space", "ключ", "key\n", 5):
@@ -576,6 +576,71 @@ class ModuleTests(unittest.TestCase):
         result = subprocess.run([sys.executable, "-I", "-c", code, SCRIPTS_DIR], capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "[]")
+
+
+PI = "http://192.168.1.61:54321"
+
+
+class ServerUrlTests(unittest.TestCase):
+    """The scripts talk to the Supabase stack on the Raspberry Pi; a cloud ref still works."""
+
+    def test_valid_server_urls_are_normalized(self):
+        cases = {
+            PI: PI,
+            PI + "/": PI,
+            "HTTP://Pi-Server.local:54321//": "http://Pi-Server.local:54321",
+            "https://abcd.supabase.co": "https://abcd.supabase.co",
+            "http://[::1]:54321": "http://[::1]:54321",
+            "https://example.org/supabase/": "https://example.org/supabase",
+            "http://localhost": "http://localhost",
+            REF: BASE,  # a bare cloud project ref
+        }
+        for given, expected in cases.items():
+            with self.subTest(given=given):
+                self.assertEqual(supabase_models.normalize_base_url(given), expected)
+
+    def test_unusable_server_urls_are_refused(self):
+        bad = (None, 5, b"http://x", "", " ", "ftp://pi:54321", "http://", "http://:54321",
+               "http://user:pw@pi:54321", "http://pi@evil.example", "http://pi:54321?x=1",
+               "http://pi:54321#frag", "http://pi:54321/#", "http://pi:99999", "http://pi:0",
+               "http://pi:abc", "http://pi:", "http:// pi", PI + "\n", " " + PI, "http://p\u012b",
+               "http://-pi-:54321", "javascript:alert(1)", "ref/../", "a b")
+        for value in bad:
+            with self.subTest(value=value):
+                self.assertIsNone(supabase_models.normalize_base_url(value))
+
+    def test_resolve_prefers_supabase_url_and_falls_back_to_the_project_ref(self):
+        resolve = supabase_models.resolve_supabase_url
+        self.assertEqual(resolve({"SUPABASE_URL": "  " + PI + "/  "}), PI)
+        self.assertEqual(resolve({"SUPABASE_URL": PI, "SUPABASE_PROJECT_REF": REF}), PI)
+        self.assertEqual(resolve({"SUPABASE_URL": "", "SUPABASE_PROJECT_REF": REF}), BASE)
+        self.assertEqual(resolve({"SUPABASE_PROJECT_REF": " " + REF + " "}), BASE)
+        self.assertIsNone(resolve({}))
+        # A broken explicit setting is reported, never silently replaced by the cloud project
+        self.assertIsNone(resolve({"SUPABASE_URL": "not a url", "SUPABASE_PROJECT_REF": REF}))
+        self.assertIsNone(resolve({"SUPABASE_PROJECT_REF": PI}))
+
+    def test_resolve_reads_the_process_environment_by_default(self):
+        with mock.patch.dict(os.environ, {"SUPABASE_URL": PI}, clear=False):
+            self.assertEqual(supabase_models.resolve_supabase_url(), PI)
+
+    def test_every_request_and_the_public_url_use_the_pi_server(self):
+        session = happy_session()
+        stored, _ = run(session, base_url=PI + "/")
+        self.assertIsNotNone(stored)
+        urls = [url for _, url, _ in session.calls]
+        self.assertEqual(urls[0], PI + "/rest/v1/rpc/pick_model_bucket")
+        self.assertEqual(urls[1], f"{PI}/storage/v1/object/models-01/{stored.object_path}")
+        self.assertEqual(urls[2], PI + "/rest/v1/rpc/register_model_file")
+        self.assertEqual(stored.url, f"{PI}/storage/v1/object/public/models-01/{stored.object_path}")
+        self.assertTrue(all(url.startswith(PI + "/") for url in urls))
+
+    def test_unusable_server_url_sends_nothing_and_says_which_setting(self):
+        session = FakeSession()
+        stored, logs = run(session, base_url="http://pi:54321?debug=1")
+        self.assertIsNone(stored)
+        self.assertEqual(session.calls, [])
+        self.assertTrue(any("SUPABASE_URL" in line for line in logs), logs)
 
 
 if __name__ == "__main__":

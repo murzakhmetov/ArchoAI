@@ -13,6 +13,7 @@ The project is divided into four main components:
    - **Database Integration**: Synchronizing analysis results with Supabase.
 3. ** IoT Monitoring (`monitoring.cpp`)**: ESP32-based firmware for real-time tracking of temperature, humidity, and air quality (VOC/Gas) in storage areas.
 4. ** Landing Page (`landing_page/`)**: A modern web interface providing project information and vision.
+5. ** Server on the Raspberry Pi (`server/`, `supabase/`)**: the database and the file storage run on the Pi itself (self-hosted Supabase stack in Docker) and replace the Supabase cloud project. See [`server/README.md`](server/README.md).
 
 ---
 
@@ -20,7 +21,7 @@ The project is divided into four main components:
 
 - **Mobile**: Flutter, Dart, Supabase-Flutter SDK
 - **Backend/AI**: Python, PyTorch, OpenCV, Tripo API
-- **Database**: Supabase (PostgreSQL, Realtime, Storage)
+- **Database**: self-hosted Supabase on the Raspberry Pi (PostgreSQL, Realtime, Storage)
 - **Embedded**: C++ (Arduino/ESP32), DHT11, MQ-series Gas Sensors, OLED SSD1306
 - **Web**: Vanilla JS, CSS (Modern Aurora Design)
 
@@ -37,6 +38,8 @@ The project is divided into four main components:
     withbutton.py     # Tripo 3D generation integration
     util/             # AI model utilities and networks
  monitoring.cpp        # ESP32 IoT Monitoring Firmware
+ server/               # Raspberry Pi server: setup, systemd services, backups, system tests
+ supabase/             # Database schema (migrations), storage buckets, policy tests
  README.md             # This file
 ```
 
@@ -49,12 +52,12 @@ The project is divided into four main components:
 2. Create a virtual environment: `python -m venv venv`.
 3. Install dependencies: `pip install -r requirements.txt`.
 4. Ensure your `pretrained_net_G.pth` model is in the root of the scripts folder.
-5. Put your keys in a `.env` file (the scripts also read `archoai_app/.env`): `GEMINI_API_KEY`, `SUPABASE_PROJECT_REF`, `SUPABASE_KEY`, `TRIPO_API_KEY` (see [Tripo API v3](#tripo-api-v3)).
-6. Run the Tripo client unit tests (no network, no GPU needed): `python -m unittest discover -s tests -v` from `scripts/scripts`.
+5. Put your keys in `archoai_app/.env` (the scripts read it): `SUPABASE_URL` (the Pi server, `http://<pi address>:54321`; `server/setup.sh` writes it together with `SUPABASE_KEY`), `GEMINI_API_KEY`, `TRIPO_API_KEY` (see [Tripo API v3](#tripo-api-v3)) and `CAMERA_INDEX` (the webcam: `0` for a single USB camera, `python check_camera.py` lists them).
+6. Run the unit tests (no network, no GPU needed): `python -m unittest discover -s tests -v` from `scripts/scripts`. `bash server/check_all.sh` checks the whole system on the Pi.
 
 ### Mobile App
 1. Ensure Flutter is installed.
-2. Copy `archoai_app/.env.example` to `archoai_app/.env` and fill in your keys (Supabase, Gemini, Tripo). The file is git-ignored but has to exist: it is declared as a Flutter asset, so `flutter run`, `flutter build` and `flutter test` all need it.
+2. Copy `archoai_app/.env` from the Pi (`server/setup.sh` fills in the server address and key; add the Gemini and Tripo keys). Without the Pi, start from `archoai_app/.env.example`. The file is git-ignored but has to exist: it is declared as a Flutter asset, so `flutter run`, `flutter build` and `flutter test` all need it. The phone must be on the same Wi-Fi as the Pi.
 3. Run `flutter pub get` inside `archoai_app`.
 4. Run the app: `flutter run`.
 5. Run the tests: `flutter test`.
@@ -87,18 +90,18 @@ Behaviour worth knowing:
 ### IoT Monitoring
 1. Compile and flash `monitoring.cpp` using the Arduino IDE or PlatformIO.
 2. Ensure you have the `Adafruit_SSD1306`, `DHT`, and `WiFi` libraries installed.
-3. Update `WIFI_SSID` and `SUPABASE_KEY` in the source code.
+3. `SUPABASE_URL` and `SUPABASE_KEY` in the source point at the Pi server. Set `WIFI_SSID` / `WIFI_PASSWORD` to the Wi-Fi network the Pi is on.
 
 ---
 
-##  Database Schema (Supabase)
+##  Database Schema (Supabase on the Raspberry Pi)
 
 The whole backend lives in [`supabase/`](supabase/README.md) as plain SQL migrations plus `config.toml`, so no hand-written `create table` is needed:
 
 - **Tables:** `artifacts` (`id`, `name`, `image_path`, `model_url`, `local_model_path`, `created_at`, `updated_at`, `status`, `type`, `material`, `era`, `purpose`, `condition`, `crack_percentage`, `tripo_task_id`, `model_file_id`) and `sensor_data` (`id`, `temperature`, `humidity`, `air_quality`, `created_at`), with row level security and realtime; `artifacts` has CHECK constraints, and the value ranges of `sensor_data` are enforced by an insert policy. The first migration, `20260101000000_baseline_tables.sql`, creates the original tables on a fresh project.
-- **Model batches:** buckets `models-01` to `models-04` (public, 50 MB per file, `.glb` only) are filled in order. `pick_model_bucket(size)` returns the first batch with room, `register_model_file()` records each file in `model_files`, and a global cap (900 MB, enforced by storage policies for every bucket) stops uploads before the free-plan quota is reached.
-- **Buckets do not add capacity.** The Free plan gives 1 GB for all buckets of the project together; the batches are a logical split. For more room, upgrade the plan (then raise `app_limits.storage_total_cap_bytes`) or use a second project.
-- **Apply:** run the files in `supabase/migrations/` in name order with `supabase db query --linked --project-ref <ref> -f <file>`, then `supabase seed buckets --linked --project-ref <ref>`, then `REF=<ref> bash supabase/tests/smoke.sh` (every line must say PASS; it takes several minutes). `python supabase/tests/migration_drift.py` checks that the files still describe the live project. Details and the list of open security decisions are in [`supabase/README.md`](supabase/README.md).
+- **Model batches:** buckets `models-01` to `models-04` (public, 50 MB per file, `.glb` only) are filled in order. `pick_model_bucket(size)` returns the first batch with room, `register_model_file()` records each file in `model_files`, and a global cap (20 GB on the Pi, enforced by storage policies for every bucket) stops uploads before the SD card is full.
+- **Buckets do not add capacity.** The batches are a logical split of the cap. For more room (a larger card), raise `app_limits.storage_total_cap_bytes` and the capacities in `model_buckets`.
+- **Where it runs:** on the Raspberry Pi (`server/README.md`): `bash server/setup.sh` starts the stack, applies every file of `supabase/migrations/` and creates the buckets from `config.toml`; a new migration is applied with `supabase migration up`. On the Pi the storage cap is 20 GB (migration `20261126000001_pi_local_server.sql`) instead of the cloud's 900 MB. `bash supabase/tests/smoke.sh` (33 policy checks) and `python3 supabase/tests/migration_drift.py` run against the Pi by default; `REMOTE=<ref>` / `--ref <ref>` still target a cloud project. Details and the list of open security decisions are in [`supabase/README.md`](supabase/README.md).
 
 ---
 
