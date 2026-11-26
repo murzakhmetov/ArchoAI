@@ -166,7 +166,7 @@ class ProbeAndEntryPointTests(unittest.TestCase):
             self.assertTrue(backend_select.probe_server(server))
         url = get.call_args.args[0]
         self.assertEqual(url, PI + "/rest/v1/sensor_data?select=id&limit=1")
-        self.assertEqual(get.call_args.kwargs["headers"], {"apikey": "pi-key"})
+        self.assertEqual(get.call_args.kwargs["headers"], {"apikey": "pi-key", "Authorization": "Bearer pi-key"})
         self.assertGreater(get.call_args.kwargs["timeout"], 0)
         with mock.patch.object(backend_select.requests, "get", return_value=mock.Mock(status_code=401)):
             self.assertFalse(backend_select.probe_server(server))

@@ -118,11 +118,14 @@ def load_server_config(env: Optional[Mapping[str, str]] = None) -> ServerConfig:
 
 
 def probe_server(server: Server, timeout: float = PROBE_TIMEOUT_SECONDS) -> bool:
-    """True when ``server`` answers an authenticated request in time (not just a TCP connect)."""
+    """True when ``server`` answers an authenticated request in time (not just a TCP connect).
+
+    Same headers as the scripts' other requests and the ESP32, which the Pi's gateway accepts.
+    """
     try:
         response = requests.get(
             f"{server.url}/rest/v1/sensor_data?select=id&limit=1",
-            headers={"apikey": server.key},
+            headers={"apikey": server.key, "Authorization": f"Bearer {server.key}"},
             timeout=timeout,
         )
         return response.status_code == 200

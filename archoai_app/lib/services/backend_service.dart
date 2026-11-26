@@ -100,12 +100,17 @@ class BackendService extends ChangeNotifier {
 
   /// True when [endpoint] answers an authenticated request in time. A TCP
   /// connect alone is not enough: a wrong key or a stopped API must count as down.
+  /// Same headers as supabase_flutter's own requests and the ESP32, which the
+  /// Pi's gateway is known to accept (the cloud accepts them too).
   Future<bool> isReachable(BackendEndpoint endpoint) async {
     try {
       final response = await http
           .get(
             Uri.parse('${endpoint.url}/rest/v1/sensor_data?select=id&limit=1'),
-            headers: {'apikey': endpoint.publishableKey},
+            headers: {
+              'apikey': endpoint.publishableKey,
+              'Authorization': 'Bearer ${endpoint.publishableKey}',
+            },
           )
           .timeout(probeTimeout);
       return response.statusCode == 200;
