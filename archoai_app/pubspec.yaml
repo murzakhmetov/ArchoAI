@@ -26,6 +26,8 @@ dependencies:
   share_plus: ^10.1.0
   google_generative_ai: ^0.4.6
   url_launcher: ^6.3.2
+  # Already used by supabase_flutter; the app keeps the chosen server in it.
+  shared_preferences: ^2.5.3
 
 dev_dependencies:
   flutter_test:

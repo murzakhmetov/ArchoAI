@@ -15,6 +15,9 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:archoai_app/main.dart' as app;
+import 'package:archoai_app/services/backend_config.dart';
+import 'package:archoai_app/services/backend_service.dart';
+import 'package:archoai_app/services/supabase_service.dart';
 import 'package:archoai_app/widgets/metric_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -63,6 +66,9 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('register, live dashboard and collection on the Pi server', (tester) async {
+    // The test account must not be mirrored to a second server: the cleanup
+    // (run_app_e2e.sh) only removes it from the Pi.
+    BackendService.mirrorAccounts = false;
     await app.main();
     final signInButton = find.text('SIGN IN');
     final dashboardTab = find.text('ДАШБОРД');
@@ -72,10 +78,13 @@ void main() {
     final serverUrl = dotenv.env['SUPABASE_URL']!.trim();
     final publishableKey = dotenv.env['SUPABASE_KEY']!.trim();
     expect(serverUrl, isNot(contains('supabase.co')), reason: 'the app must use the Pi, not the cloud');
+    // With a second server configured the app may fail over; this test is about the Pi.
+    expect(BackendService.instance.active?.url, normalizeUrl(serverUrl),
+        reason: 'the app connected to another server than SUPABASE_URL (is the Pi reachable?)');
 
     // A session left by an earlier run is closed first.
     if (Supabase.instance.client.auth.currentSession != null) {
-      await Supabase.instance.client.auth.signOut();
+      await SupabaseService.instance.signOut();
       await pumpUntil(tester, () => shows(signInButton), what: 'the login screen after sign-out');
     }
 
@@ -134,7 +143,7 @@ void main() {
     await pumpUntil(tester, () => names.any((name) => shows(find.text(name))),
         what: 'one of the newest artifacts ($names) in the collection');
 
-    await Supabase.instance.client.auth.signOut();
+    await SupabaseService.instance.signOut();
     await pumpUntil(tester, () => shows(signInButton), what: 'the login screen after sign-out');
   });
 }

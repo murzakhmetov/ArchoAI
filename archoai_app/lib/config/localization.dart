@@ -59,6 +59,20 @@ abstract class AppStrings {
   String get analysisError;
   String get saveArtifact;
 
+  String get server;
+  String get serverCloud;
+  String get serverPi;
+  String get serverAuto;
+  String serverAutoHint(String first, String second);
+  String get serverChecking;
+  String get serverOnline;
+  String get serverOffline;
+  String get serverInUse;
+  String serverConnected(String name);
+  String get serverSwitchFailed;
+  String get serverAccountsNote;
+  String get serverRetry;
+
   String translate(String value);
 }
 
@@ -120,6 +134,21 @@ class RuStrings extends AppStrings {
   @override String get analyzing => 'ИИ анализирует артефакт...';
   @override String get analysisError => 'Ошибка ИИ при анализе';
   @override String get saveArtifact => 'Сохранить артефакт';
+
+  @override String get server => 'Сервер';
+  @override String get serverCloud => 'Облако Supabase';
+  @override String get serverPi => 'Raspberry Pi';
+  @override String get serverAuto => 'Авто';
+  @override String serverAutoHint(String first, String second) => '$first, если доступен, иначе $second';
+  @override String get serverChecking => 'Проверка...';
+  @override String get serverOnline => 'На связи';
+  @override String get serverOffline => 'Нет связи';
+  @override String get serverInUse => 'Используется';
+  @override String serverConnected(String name) => 'Подключено: $name';
+  @override String get serverSwitchFailed => 'Не удалось подключиться к серверу';
+  @override String get serverAccountsNote =>
+      'У каждого сервера свои аккаунты. Вход на Raspberry Pi выполняет вход и в облако с тем же e-mail и паролем; на самом Pi войдите один раз.';
+  @override String get serverRetry => 'Подключиться';
 
   @override
   String translate(String value) {
@@ -204,6 +233,21 @@ class EnStrings extends AppStrings {
   @override String get analyzing => 'AI analyzing artifact...';
   @override String get analysisError => 'AI analysis error';
   @override String get saveArtifact => 'Save Artifact';
+
+  @override String get server => 'Server';
+  @override String get serverCloud => 'Supabase Cloud';
+  @override String get serverPi => 'Raspberry Pi';
+  @override String get serverAuto => 'Auto';
+  @override String serverAutoHint(String first, String second) => '$first when reachable, otherwise $second';
+  @override String get serverChecking => 'Checking...';
+  @override String get serverOnline => 'Online';
+  @override String get serverOffline => 'Offline';
+  @override String get serverInUse => 'In use';
+  @override String serverConnected(String name) => 'Connected: $name';
+  @override String get serverSwitchFailed => 'Could not connect to the server';
+  @override String get serverAccountsNote =>
+      'Each server has its own accounts. Signing in on the Raspberry Pi also signs you in on the cloud with the same e-mail and password; on the Pi itself, sign in once.';
+  @override String get serverRetry => 'Connect';
 
   @override
   String translate(String value) => value; // Already English

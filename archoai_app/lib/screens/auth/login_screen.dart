@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../config/app_colors.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/neon_button.dart';
+import '../../widgets/server_picker.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -266,6 +267,11 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                   ),
                 ),
+
+                // Accounts belong to one server: after a failover the user
+                // must be able to go back to the server that has the account.
+                const SizedBox(height: 16),
+                const ServerChip(),
 
                 const SizedBox(height: 40),
               ],

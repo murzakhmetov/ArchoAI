@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../config/app_colors.dart';
+import '../../services/backend_config.dart';
+import '../../services/backend_service.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/server_picker.dart';
 import '../../services/language_service.dart';
 import '../../config/localization.dart';
 
@@ -152,6 +155,7 @@ class ProfileScreen extends StatelessWidget {
                   subtitle: LanguageService.instance.isRussian ? 'Русский' : 'English',
                   onTap: () => LanguageService.instance.toggleLanguage(),
                 ),
+                _buildServerItem(context),
                 _buildSettingItem(
                   icon: Icons.storage_outlined,
                   title: S.current.storage,
@@ -260,6 +264,27 @@ class ProfileScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  /// The server in use (cloud or Raspberry Pi); tapping it opens the switch
+  /// when a second server is configured.
+  Widget _buildServerItem(BuildContext context) {
+    final backend = BackendService.instance;
+    // Rebuilt when only the choice changes (Auto <-> the server already in use).
+    return ListenableBuilder(
+      listenable: backend,
+      builder: (context, _) {
+        final active = backend.active;
+        if (active == null) return const SizedBox.shrink();
+        final mode = backend.choice == ServerChoice.auto && backend.hasFallback ? ' (${S.current.serverAuto})' : '';
+        return _buildSettingItem(
+          icon: active.kind == BackendKind.cloud ? Icons.cloud_outlined : Icons.developer_board_outlined,
+          title: S.current.server,
+          subtitle: '${serverLabel(active)}$mode',
+          onTap: backend.hasFallback ? () => showServerPicker(context) : null,
+        );
+      },
     );
   }
 

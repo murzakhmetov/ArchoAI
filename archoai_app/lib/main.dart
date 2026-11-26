@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/app_colors.dart';
 import 'config/app_theme.dart';
 import 'screens/auth/auth_gate.dart';
 
+import 'services/backend_service.dart';
 import 'services/language_service.dart';
+import 'widgets/server_picker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,7 +15,10 @@ Future<void> main() async {
   // Set preferred orientations
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
-  final initError = await _initializeBackend();
+  // Picks the server (cloud or Raspberry Pi, see services/backend_config.dart)
+  // and initializes Supabase for it.
+  final envError = await _loadEnv();
+  if (envError == null) await BackendService.instance.initialize(dotenv.env);
 
   // Set system UI overlay style for dark theme
   SystemChrome.setSystemUIOverlayStyle(
@@ -26,53 +30,45 @@ Future<void> main() async {
     ),
   );
 
-  // Without Supabase every screen would crash on `Supabase.instance`, so show
-  // a readable configuration error instead of a red error screen.
-  runApp(initError == null
-      ? const ArchoAIApp()
-      : StartupErrorApp(message: initError));
+  runApp(RootApp(envError: envError));
 }
 
-/// Loads `.env` and initializes Supabase. Returns a human readable error
-/// message, or null when everything is ready.
-Future<String?> _initializeBackend() async {
+/// Loads `.env`. Returns a human readable error, or null when it is loaded.
+Future<String?> _loadEnv() async {
   try {
     await dotenv.load(fileName: '.env');
+    return null;
   } catch (e) {
     debugPrint('CRITICAL INITIALIZATION ERROR: $e');
     return 'Could not load the .env file.\n'
         'Copy archoai_app/.env.example to archoai_app/.env and fill in your keys.\n\n$e';
   }
+}
 
-  String? env(String key) {
-    final value = dotenv.env[key]?.trim();
-    return (value == null || value.isEmpty) ? null : value;
-  }
+/// Shows the app on the server in use, a "connecting" screen while the server
+/// is switched, or a readable configuration error. Without Supabase every
+/// screen would crash on `Supabase.instance`, so the app is only built once a
+/// server is connected, and rebuilt from scratch after every switch.
+class RootApp extends StatelessWidget {
+  const RootApp({super.key, this.envError});
 
-  final projectRef = env('SUPABASE_PROJECT_REF');
-  final supabaseUrl = env('SUPABASE_URL') ??
-      (projectRef == null ? null : 'https://$projectRef.supabase.co');
-  final supabaseKey = env('SUPABASE_PUBLISHABLE_KEY') ??
-      env('SUPABASE_ANON_KEY') ??
-      env('SUPABASE_KEY');
+  final String? envError;
 
-  if (supabaseUrl == null) {
-    return 'Missing SUPABASE_URL (or SUPABASE_PROJECT_REF) in .env.';
-  }
-  if (supabaseKey == null) {
-    return 'Missing SUPABASE_ANON_KEY (or SUPABASE_PUBLISHABLE_KEY) in .env.';
-  }
-
-  try {
-    await Supabase.initialize(
-      url: supabaseUrl,
-      publishableKey: supabaseKey,
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: BackendService.instance,
+      builder: (context, _) {
+        final backend = BackendService.instance;
+        if (backend.isSwitching) return const ConnectingApp();
+        final error = envError ?? backend.initError;
+        if (error != null || backend.active == null) {
+          return StartupErrorApp(message: error ?? 'Not connected to a server.');
+        }
+        return ArchoAIApp(key: ValueKey(backend.generation));
+      },
     );
-  } catch (e) {
-    debugPrint('CRITICAL INITIALIZATION ERROR: $e');
-    return 'Could not initialize Supabase.\n\n$e';
   }
-  return null;
 }
 
 class ArchoAIApp extends StatelessWidget {
@@ -91,6 +87,24 @@ class ArchoAIApp extends StatelessWidget {
           home: const AuthGate(),
         );
       },
+    );
+  }
+}
+
+/// Shown for the moment the app reconnects to another server.
+class ConnectingApp extends StatelessWidget {
+  const ConnectingApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'ArchoAI',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.darkTheme,
+      home: const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(child: CircularProgressIndicator(color: AppColors.cyan)),
+      ),
     );
   }
 }
@@ -137,6 +151,8 @@ class StartupErrorApp extends StatelessWidget {
                       height: 1.4,
                     ),
                   ),
+                  // With two servers the user can try the other one from here.
+                  const StartupServerButtons(),
                 ],
               ),
             ),

@@ -12,6 +12,9 @@
 #define WIFI_PASSWORD  "Alikhan12345"
 // ArchoAI server on the Raspberry Pi: http://<pi address>:54321 (server/setup.sh prints it).
 // Give the Pi a fixed address in the router (DHCP reservation), otherwise it can change.
+// Cloud only (no Pi): put "https://<ref>.supabase.co/rest/v1/sensor_data" here and the cloud
+// project's publishable key below. Pi AND cloud: keep the Pi here; server/replicate.py on the Pi
+// copies the readings to the cloud (server/README.md). Keep scripts/monitoring.cpp identical.
 #define SUPABASE_URL   "http://192.168.1.61:54321/rest/v1/sensor_data"
 // Publishable key of the Pi server (SUPABASE_KEY in archoai_app/.env). It only allows sensor
 // readings within the value ranges, at most one every 2 seconds.

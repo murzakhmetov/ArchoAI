@@ -13,7 +13,7 @@ The project is divided into four main components:
    - **Database Integration**: Synchronizing analysis results with Supabase.
 3. ** IoT Monitoring (`monitoring.cpp`)**: ESP32-based firmware for real-time tracking of temperature, humidity, and air quality (VOC/Gas) in storage areas.
 4. ** Landing Page (`landing_page/`)**: A modern web interface providing project information and vision.
-5. ** Server on the Raspberry Pi (`server/`, `supabase/`)**: the database and the file storage run on the Pi itself (self-hosted Supabase stack in Docker) and replace the Supabase cloud project. See [`server/README.md`](server/README.md).
+5. ** Server on the Raspberry Pi (`server/`, `supabase/`)**: the database and the file storage run on the Pi itself (self-hosted Supabase stack in Docker), on a Supabase cloud project, or on both at once (see [Where it runs](#where-it-runs-cloud-raspberry-pi-or-both)). See [`server/README.md`](server/README.md).
 
 ---
 
@@ -21,7 +21,7 @@ The project is divided into four main components:
 
 - **Mobile**: Flutter, Dart, Supabase-Flutter SDK
 - **Backend/AI**: Python, PyTorch, OpenCV, Tripo API
-- **Database**: self-hosted Supabase on the Raspberry Pi (PostgreSQL, Realtime, Storage)
+- **Database**: self-hosted Supabase on the Raspberry Pi and/or a Supabase cloud project (PostgreSQL, Realtime, Storage)
 - **Embedded**: C++ (Arduino/ESP32), DHT11, MQ-series Gas Sensors, OLED SSD1306
 - **Web**: Vanilla JS, CSS (Modern Aurora Design)
 
@@ -45,6 +45,23 @@ The project is divided into four main components:
 
 ---
 
+##  Where it runs: cloud, Raspberry Pi, or both
+
+| Setup | `archoai_app/.env` | Where the data is |
+| --- | --- | --- |
+| Pi only (default) | `SUPABASE_URL=http://<pi address>:54321` + `SUPABASE_KEY` (written by `server/setup.sh`) | on the Pi |
+| Cloud only | `SUPABASE_URL=https://<ref>.supabase.co` (or `SUPABASE_PROJECT_REF=<ref>`) + the project's publishable key | in the cloud |
+| Both | the Pi as above, plus `SUPABASE_FALLBACK_URL=https://<ref>.supabase.co` + `SUPABASE_FALLBACK_KEY` (the cloud's publishable key) | on both servers |
+
+How "both" works:
+- **One server at a time per client.** The app and the scanner scripts use the first server when it answers an authenticated request within 2.5 s, otherwise the second one (Pi on the local Wi-Fi, cloud everywhere else). `SUPABASE_SERVER=primary` or `fallback` forces one. In the app, **Profile → Server** (also on the sign-in screen) switches on the device.
+- **Data is copied by the Pi.** Every client writes only to the server it uses. `server/replicate.py` on the Pi copies sensor readings, artifacts, photos and 3D models both ways every 2 minutes. It stays off until `server/replica.env` holds the cloud URL and the cloud's **secret** key (see [`server/README.md`](server/README.md)). Without it, the two servers are not kept in sync.
+- **Accounts are per server.** Signing in on the Pi also signs in (or registers) on the cloud with the same e-mail and password, so a later switch to the cloud starts signed in; a cloud project that requires e-mail confirmation asks for it once. The other way round the app never sends a password in the background: the Pi's plain-HTTP address could belong to anybody on another network. After moving to the Pi, sign in there once.
+- **The ESP32** posts to the one address in `monitoring.cpp`. With both servers, keep the Pi there.
+- **Secret keys** never go into `archoai_app/.env`: it is bundled into the app. Only the replicator on the Pi holds them.
+
+---
+
 ##  Setup & Installation
 
 ### AI Scripts
@@ -57,7 +74,7 @@ The project is divided into four main components:
 
 ### Mobile App
 1. Ensure Flutter is installed.
-2. Copy `archoai_app/.env` from the Pi (`server/setup.sh` fills in the server address and key; add the Gemini and Tripo keys). Without the Pi, start from `archoai_app/.env.example`. The file is git-ignored but has to exist: it is declared as a Flutter asset, so `flutter run`, `flutter build` and `flutter test` all need it. The phone must be on the same Wi-Fi as the Pi.
+2. Copy `archoai_app/.env` from the Pi (`server/setup.sh` fills in the server address and key; add the Gemini and Tripo keys). Without the Pi, start from `archoai_app/.env.example`. The file is git-ignored but has to exist: it is declared as a Flutter asset, so `flutter run`, `flutter build` and `flutter test` all need it. The phone must be on the same Wi-Fi as the Pi, unless a cloud project is configured as the second server (see [Where it runs](#where-it-runs-cloud-raspberry-pi-or-both)).
 3. Run `flutter pub get` inside `archoai_app`.
 4. Run the app: `flutter run`.
 5. Run the tests: `flutter test`.

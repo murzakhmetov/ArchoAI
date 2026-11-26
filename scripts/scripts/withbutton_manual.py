@@ -12,7 +12,8 @@ from google.genai import types
 from util.inference_utils import create_model, inference
 from main import Parameters
 from tripo_client import TripoClient, TripoError
-from supabase_models import store_model, clamp_crack_percentage, resolve_supabase_url
+from supabase_models import store_model, clamp_crack_percentage
+from backend_select import server_from_env
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', 'archoai_app', '.env'))
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', 'archoai_app', '.env'))
@@ -27,8 +28,11 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 # http://192.168.1.61:54321, см. server/README.md). Нужен сетевой адрес Pi, а не 127.0.0.1: ссылки на
 # фото и модели сохраняются в базе и должны открываться на телефоне. SUPABASE_PROJECT_REF без
 # SUPABASE_URL по-прежнему означает облачный проект Supabase.
-SUPABASE_URL = resolve_supabase_url()
-SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or "").strip()
+# Второй сервер (SUPABASE_FALLBACK_URL + SUPABASE_FALLBACK_KEY, например облако при сервере на Pi)
+# используется, когда первый не отвечает; server/replicate.py на Pi копирует данные между ними.
+_SERVER = server_from_env()
+SUPABASE_URL = _SERVER.url if _SERVER else None
+SUPABASE_KEY = _SERVER.key if _SERVER else ""
 BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "artifact-images")
 MODEL_BUCKET_NAME = os.getenv("SUPABASE_MODEL_BUCKET_NAME", "3d1")
 

@@ -1,45 +1,71 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/sensor_data.dart';
 import '../models/artifact_model.dart';
+import 'backend_service.dart';
 import 'local_storage_service.dart';
 import 'model_storage.dart';
 
 class SupabaseService {
   static SupabaseService? _instance;
-  SupabaseService._();
+  SupabaseService._() {
+    _generation = BackendService.instance.generation;
+    BackendService.instance.addListener(_onServerChanged);
+  }
 
   static SupabaseService get instance {
     _instance ??= SupabaseService._();
     return _instance!;
   }
 
+  /// Always the client of the server in use (BackendService reconnects it).
   SupabaseClient get _client => Supabase.instance.client;
 
-  //  Auth 
+  int _generation = 0;
+
+  /// Another server holds other data: the once-per-connection work runs again.
+  /// A seeding run of the previous server is left alone: it uses that
+  /// server's (now closed) client, and [_seedIfStillEmpty] starts a new one.
+  void _onServerChanged() {
+    final generation = BackendService.instance.generation;
+    if (generation == _generation) return;
+    _generation = generation;
+    _modelFilesLinked = false;
+  }
+
+  //  Auth
 
   User? get currentUser => _client.auth.currentUser;
   bool get isLoggedIn => currentUser != null;
 
   Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
 
+  /// Signs in on the server in use. With a second server configured, the
+  /// same account is signed in there in the background (BackendService).
   Future<AuthResponse> signIn(String email, String password) async {
-    return await _client.auth.signInWithPassword(
+    final response = await _client.auth.signInWithPassword(
       email: email,
       password: password,
     );
+    unawaited(BackendService.instance.mirrorAccount(email, password));
+    return response;
   }
 
   Future<AuthResponse> signUp(String email, String password) async {
-    return await _client.auth.signUp(
+    final response = await _client.auth.signUp(
       email: email,
       password: password,
     );
+    unawaited(BackendService.instance.mirrorAccount(email, password));
+    return response;
   }
 
+  /// Signs out of the server in use and drops the sessions kept for the other.
   Future<void> signOut() async {
+    await BackendService.instance.forgetOtherSessions();
     await _client.auth.signOut();
   }
 
@@ -134,8 +160,9 @@ class SupabaseService {
         .order('created_at', ascending: false);
     var list = (response as List).map((json) => ArtifactModel.fromJson(json)).toList();
     
-    // Auto-seed if empty
-    if (list.isEmpty && isLoggedIn && seedIfEmpty) {
+    // Auto-seed if empty. Not with two servers: each empty server would get
+    // its own demo rows and the replicator would then copy both sets.
+    if (list.isEmpty && isLoggedIn && seedIfEmpty && !BackendService.instance.hasFallback) {
       await _seedIfStillEmpty();
       final seeded = await _client
           .from('artifacts')
@@ -160,18 +187,25 @@ class SupabaseService {
   }
 
   Future<void>? _seeding;
+  int _seedingGeneration = -1;
 
   // Concurrent callers share one seeding run, and the table is checked again
-  // right before inserting, so the demo rows are never inserted twice.
+  // right before inserting, so the demo rows are never inserted twice. A run
+  // belongs to one server: it keeps that server's client from start to end.
   Future<void> _seedIfStillEmpty() {
-    return _seeding ??= () async {
-      try {
-        final existing = await _client.from('artifacts').select('id').limit(1);
-        if ((existing as List).isEmpty) await seedArtifacts();
-      } finally {
-        _seeding = null;
-      }
+    final generation = BackendService.instance.generation;
+    final running = _seeding;
+    if (running != null && _seedingGeneration == generation) return running;
+    final client = _client;
+    final run = () async {
+      final existing = await client.from('artifacts').select('id').limit(1);
+      if ((existing as List).isEmpty) await seedArtifacts(client);
     }();
+    _seeding = run;
+    _seedingGeneration = generation;
+    return run.whenComplete(() {
+      if (identical(_seeding, run)) _seeding = null;
+    });
   }
 
   /// Sets [ArtifactModel.localModelPath] from what is actually on this device.
@@ -235,10 +269,20 @@ class SupabaseService {
     }
 
     final objectPath = '$artifactId.glb';
+    // One upload talks to one server from start to end: a server switch in
+    // the middle closes this client, so the rest fails instead of landing on
+    // the other server.
+    final client = _client;
+    final connection = BackendService.instance.generation;
+    if (isDatabaseId(artifactId) && !await _artifactExists(client, artifactId)) {
+      throw ModelStorageException(
+        'This artifact is not on the server in use yet. The model stays on this device; try again later.',
+      );
+    }
 
     Future<void> upload(String bucket) async {
       try {
-        await _client.storage.from(bucket).upload(
+        await client.storage.from(bucket).upload(
               objectPath,
               file,
               fileOptions: FileOptions(
@@ -257,7 +301,7 @@ class SupabaseService {
     // still accepts it, so no orphan is left behind. If it refuses (the total cap is
     // reached or the batch was retired), the file goes to a batch picked now and the old
     // object stays until it is removed by hand.
-    var bucket = await _bucketOfPreviousUpload(artifactId, objectPath);
+    var bucket = await _bucketOfPreviousUpload(client, artifactId, objectPath);
     if (bucket != null) {
       try {
         await upload(bucket);
@@ -269,17 +313,17 @@ class SupabaseService {
       }
     }
     if (bucket == null) {
-      bucket = await _pickModelBucket(size);
+      bucket = await _pickModelBucket(client, size);
       await upload(bucket);
     }
 
-    final url = _client.storage.from(bucket).getPublicUrl(objectPath);
+    final url = client.storage.from(bucket).getPublicUrl(objectPath);
 
     // Recording the file is bookkeeping (usage per batch): its failure must not
     // fail an upload that already succeeded.
     String? fileId;
     try {
-      final result = await _client.rpc('register_model_file', params: {
+      final result = await client.rpc('register_model_file', params: {
         'p_bucket_id': bucket,
         'p_object_path': objectPath,
         if (isDatabaseId(artifactId)) 'p_artifact_id': artifactId,
@@ -297,14 +341,32 @@ class SupabaseService {
       url: url,
       sizeBytes: size,
       fileId: fileId,
+      connection: connection,
     );
   }
 
+  /// False only when the server definitely has no such artifact (it was made
+  /// on the other server and not copied yet). A failed check lets the upload
+  /// go ahead, as before.
+  Future<bool> _artifactExists(SupabaseClient client, String artifactId) async {
+    try {
+      final rows = await client.from('artifacts').select('id').eq('id', artifactId).limit(1);
+      return rows.isNotEmpty;
+    } catch (e) {
+      debugPrint('Could not check artifact $artifactId: $e');
+      return true;
+    }
+  }
+
   /// Bucket that already holds this artifact's own `<id>.glb`, if any.
-  Future<String?> _bucketOfPreviousUpload(String artifactId, String objectPath) async {
+  Future<String?> _bucketOfPreviousUpload(
+    SupabaseClient client,
+    String artifactId,
+    String objectPath,
+  ) async {
     if (!isDatabaseId(artifactId)) return null;
     try {
-      final rows = await _client
+      final rows = await client
           .from('model_files')
           .select('bucket_id')
           .eq('artifact_id', artifactId)
@@ -335,10 +397,10 @@ class SupabaseService {
     }
   }
 
-  Future<String> _pickModelBucket(int sizeBytes) async {
+  Future<String> _pickModelBucket(SupabaseClient client, int sizeBytes) async {
     try {
       final result =
-          await _client.rpc('pick_model_bucket', params: {'p_size_bytes': sizeBytes});
+          await client.rpc('pick_model_bucket', params: {'p_size_bytes': sizeBytes});
       if (result is String && result.isNotEmpty) return result;
       throw ModelStorageException('Unexpected answer from pick_model_bucket.');
     } on PostgrestException catch (e) {
@@ -353,6 +415,10 @@ class SupabaseService {
   /// (the row is gone, or RLS refused), because an update that matches no row
   /// does not raise an error on its own.
   Future<void> attachModelToArtifact(String artifactId, StoredModel model) async {
+    final connection = model.connection;
+    if (connection != null && connection != BackendService.instance.generation) {
+      throw StateError('The server was switched during the upload; the model stays on this device.');
+    }
     final rows = await _client
         .from('artifacts')
         .update({
@@ -397,7 +463,7 @@ class SupabaseService {
   // permanent public URL (model_url) is written to artifacts, never the
   // temporary Tripo link and never the device-specific local file path.
 
-  Future<void> seedArtifacts() async {
+  Future<void> seedArtifacts([SupabaseClient? client]) async {
     final samples = [
       {
         'name': 'Керамический сосуд #17',
@@ -444,6 +510,6 @@ class SupabaseService {
         'status': 'cataloged',
       },
     ];
-    await _client.from('artifacts').insert(samples);
+    await (client ?? _client).from('artifacts').insert(samples);
   }
 }

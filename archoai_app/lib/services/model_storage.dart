@@ -15,6 +15,7 @@ class StoredModel {
     required this.url,
     required this.sizeBytes,
     this.fileId,
+    this.connection,
   });
 
   final String bucketId;
@@ -27,6 +28,11 @@ class StoredModel {
   /// Row id in `model_files`, or null when recording the file failed (the
   /// upload itself still succeeded).
   final String? fileId;
+
+  /// BackendService.generation of the server that stored the file. The URL
+  /// and [fileId] belong to that server, so they must never be attached to an
+  /// artifact on another one after a switch.
+  final int? connection;
 }
 
 /// A readable failure of the cloud model storage. Local files are never
