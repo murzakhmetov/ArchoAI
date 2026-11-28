@@ -175,7 +175,7 @@ class DeviceTests(ServerTestCase):
         self.delete_rows("sensor_data", "id", rows[0]["id"])
 
     def test_reading_with_soil_and_ppm_is_stored(self):
-        """The current firmware body (migration 20261128000002); a missing sensor goes out as null."""
+        """The current firmware body (migration 20261128000003); a missing sensor goes out as null."""
         for values in ({"temperature": 24.5, "humidity": 45.25, "air_quality": 3336.0,
                         "air_ppm": 612.0, "soil_moisture": 37.5, "soil_temperature": 18.25},
                        {"temperature": 24.5, "humidity": 45.25, "air_quality": 3337.0,

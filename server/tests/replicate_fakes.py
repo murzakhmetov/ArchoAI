@@ -70,7 +70,7 @@ class FakeServer:
         self.writes = []
         self.modified = {}          # object key -> datetime (Last-Modified); absent: the header is left out
         self.reject_sensor = None   # predicate(row) -> True: a 400 / 23514 CHECK violation, as the real table gives
-        self.no_soil_columns = False  # True: a server without migration 20261128000002 (PGRST204 on the new columns)
+        self.no_soil_columns = False  # True: a server without migration 20261128000003 (PGRST204 on the new columns)
         self.ticks = 0
         self.next_id = 1
 

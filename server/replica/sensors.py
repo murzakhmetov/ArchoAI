@@ -7,7 +7,7 @@ TEST_HUMIDITY = 33.25   # the end-to-end tests of the app write this reading and
 TEST_AIR_QUALITY = 3999
 BATCH = 500
 COLUMNS = ("created_at", "temperature", "humidity", "air_quality")
-# Added by migration 20261128000002 (nullable). They are copied but are NOT part of a reading's identity:
+# Added by migration 20261128000003 (nullable). They are copied but are NOT part of a reading's identity:
 # the key stays the same as before, so readings copied earlier are not copied a second time, and a server
 # that does not have these columns yet still recognises the reading.
 EXTRA_COLUMNS = ("soil_moisture", "soil_temperature", "air_ppm")

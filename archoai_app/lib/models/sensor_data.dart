@@ -2,7 +2,7 @@
 ///
 /// [temperature] and [humidity] are the AIR temperature and humidity (DHT11),
 /// [airQuality] is the raw MQ-135 ADC value (0..4095). The soil values and
-/// [airPpm] were added later (migration 20261128000002) and are null in older
+/// [airPpm] were added later (migration 20261128000003) and are null in older
 /// rows, from an older firmware or when that sensor is not connected.
 class SensorData {
   final int? id;

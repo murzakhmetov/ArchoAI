@@ -130,7 +130,7 @@ The board measures five values; the app shows each of them with a 24 h chart (Da
 1. Compile and flash `monitoring.cpp` using the Arduino IDE or PlatformIO (`bash server/esp32.sh upload` on the Pi).
 2. Ensure you have the `Adafruit_SSD1306`, `DHT`, `OneWire`, `DallasTemperature` and `WiFi` libraries installed.
 3. Calibrate once with the serial monitor (115200 baud): `SOIL_RAW_DRY` / `SOIL_RAW_WET` (raw value in dry air and in water) and `MQ135_R0_KOHM` (the "R0 for 420 ppm" value printed outdoors after the sensor has warmed up). A sensor that is not connected is sent as `null` and the app shows `--`.
-4. Apply migration `supabase/migrations/20261128000002_soil_and_air_ppm.sql` on every server first (`supabase migration up` on the Pi); until then the server refuses the new fields.
+4. Apply migration `supabase/migrations/20261128000003_soil_and_air_ppm.sql` on every server first (`supabase migration up` on the Pi); until then the server refuses the new fields.
 5. `SUPABASE_URL` and `SUPABASE_KEY` in the source point at the Pi server. Set `WIFI_SSID` / `WIFI_PASSWORD` to the Wi-Fi network the Pi is on.
 
 ---

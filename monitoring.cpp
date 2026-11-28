@@ -18,7 +18,7 @@
 // Cloud only (no Pi): put "https://<ref>.supabase.co/rest/v1/sensor_data" here and the cloud
 // project's publishable key below. Pi AND cloud: keep the Pi here; server/replicate.py on the Pi
 // copies the readings to the cloud (server/README.md). Keep scripts/monitoring.cpp identical.
-#define SUPABASE_URL   "http://10.21.2.23:54321/rest/v1/sensor_data"
+#define SUPABASE_URL   "http://10.226.234.214:54321/rest/v1/sensor_data"
 // Publishable key of the Pi server (SUPABASE_KEY in archoai_app/.env). It only allows sensor
 // readings within the value ranges, at most one every 2 seconds.
 #define SUPABASE_KEY   "sb_publishable_D4bdWy0AwSGBhrBZfSrLAg_ZT9AKlWY"

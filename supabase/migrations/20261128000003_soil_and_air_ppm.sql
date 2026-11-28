@@ -1,4 +1,4 @@
--- 20261128000002_soil_and_air_ppm.sql
+-- 20261128000003_soil_and_air_ppm.sql
 --
 -- New readings from the ESP32 monitor (monitoring.cpp):
 --   soil_moisture     soil moisture, %            capacitive soil moisture sensor (analog)

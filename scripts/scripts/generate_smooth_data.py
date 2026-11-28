@@ -66,7 +66,7 @@ def generate_beautiful_data(num_points=144): # 24 hours with 10 min steps
         # Air quality: steady with minor fluctuations, maybe a slight peak at "morning/evening"
         air = 150 + 20 * math.sin(2 * angle) + random.uniform(-5, 5)
         
-        # Soil (migration 20261128000002): the soil warms later and less than the air, and slowly dries.
+        # Soil (migration 20261128000003): the soil warms later and less than the air, and slowly dries.
         soil_temp = 20 + 2.5 * math.sin(angle - 0.8) + random.uniform(-0.1, 0.1)
         soil_moist = 45 - 8 * (i / num_points) + 2 * math.sin(angle) + random.uniform(-0.5, 0.5)
         # Air quality in ppm (CO2 equivalent), outdoor air is about 420 ppm.

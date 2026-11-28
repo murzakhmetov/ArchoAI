@@ -223,7 +223,7 @@ class PoisonTests(ReplicateCase):
 
 
 class SoilColumnsTests(ReplicateCase):
-    """Soil moisture, soil temperature and air ppm (migration 20261128000002) travel with a reading."""
+    """Soil moisture, soil temperature and air ppm (migration 20261128000003) travel with a reading."""
 
     def test_the_new_values_are_copied(self):
         self.net.local.sensors.append({"id": 1, **reading("2026-11-26T10:00:00Z"),
