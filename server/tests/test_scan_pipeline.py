@@ -26,20 +26,22 @@ PUBLIC = f"{BASE}/storage/v1/object/public/"
 
 class ScanPipelineTests(ServerTestCase):
 
-    def run_scan(self, script_name, keys=None):
+    def run_scan(self, script_name, keys=None, **extra_env):
         if not (SCRIPTS / "pretrained_net_G.pth").exists():
             self.skipTest("DeepCrack weights pretrained_net_G.pth are missing")
         name = f"Selftest scan {uuid.uuid4().hex[:8]}"
         env = dict(os.environ, SUPABASE_URL=BASE, SUPABASE_KEY=PUBLISHABLE, HARNESS_ARTIFACT_NAME=name,
                    PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8",
                    # Only the Pi: a second server from archoai_app/.env (the cloud) must not get test data.
-                   SUPABASE_FALLBACK_URL="", SUPABASE_FALLBACK_KEY="", SUPABASE_SERVER="primary")
+                   SUPABASE_FALLBACK_URL="", SUPABASE_FALLBACK_KEY="", SUPABASE_SERVER="primary", **extra_env)
         env.pop("SUPABASE_PROJECT_REF", None)
         python = str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
         done = subprocess.run([python, str(HARNESS), str(SCRIPTS / script_name)], env=env, input=keys,
                               capture_output=True, text=True, encoding="utf-8", timeout=900)
         output = done.stdout + done.stderr
         rows = self.admin_select(f"artifacts?name=eq.{requests.utils.quote(name)}&select=*")
+        if not rows and "без анализа" in done.stdout:  # saved without Gemini: found by its scan folder
+            rows = self.admin_select("artifacts?name=like.*" + requests.utils.quote("(без анализа)") + "&select=*")
         for row in rows:  # clean-ups run in reverse order: artifact, model_files, then the files
             for url in [row.get("image_path"), row.get("model_url"), *(row.get("photo_urls") or [])]:
                 if url and url.startswith(PUBLIC):
@@ -47,6 +49,8 @@ class ScanPipelineTests(ServerTestCase):
                     self.delete_object(bucket, path)
         self.addCleanup(lambda: self.rest("DELETE", f"model_files?tripo_task_id=eq.task-e2e-{name.split()[-1]}",
                                           admin_headers()))
+        for row in rows:
+            self.delete_rows("artifacts", "id", row["id"])
         self.delete_rows("artifacts", "name", requests.utils.quote(name))
         self.assertEqual(done.returncode, 0, output[-3000:])
         self.assertIn("HARNESS_RESULT", output, output[-3000:])
@@ -103,6 +107,25 @@ class ScanPipelineTests(ServerTestCase):
             photo = requests.get(url, timeout=TIMEOUT)
             self.assertEqual(photo.status_code, 200, url)
             self.assertTrue(photo.content.startswith(b"\xff\xd8\xff"), f"{url} is not a JPEG")
+
+
+    def test_turntable_scan_survives_a_busy_gemini(self):
+        # Two 503 answers ("high demand"), then Gemini answers: retries keep the analysis.
+        name, rows, output = self.run_scan("turntable_scan.py", keys="scan\n", HARNESS_GEMINI_BUSY="2")
+        self.check_scan(name, rows, output)
+        self.assertIn("занят", output)
+
+    def test_turntable_scan_is_kept_when_gemini_stays_down(self):
+        # Every Gemini call answers 503: the photos and the model are still saved, as "pending".
+        name, rows, output = self.run_scan("turntable_scan.py", keys="scan\n", HARNESS_GEMINI_BUSY="99",
+                                           GEMINI_FALLBACK_MODELS="gemini-2.5-flash-lite")
+        self.assertIn("без анализа", output, output[-2000:])
+        self.assertEqual(len(rows), 1, output[-2000:])
+        row = rows[0]
+        self.assertEqual(row["status"], "complete" if row.get("model_url") else "pending")
+        self.assertEqual(len(row["photo_urls"]), 6)
+        self.assertTrue(row["model_url"], "the 3D model must still be saved")
+        self.assertEqual(requests.get(row["photo_urls"][0], timeout=TIMEOUT).status_code, 200)
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ ANALYSIS = {"name": os.environ["HARNESS_ARTIFACT_NAME"], "type": "Domestic", "ma
             "era": "Iron Age", "purpose": "Storage", "condition": "Fragmentary", "crack_percentage": 12.5}
 calls = []
 polls = {"n": 0}
+busy = {"left": int(os.environ.get("HARNESS_GEMINI_BUSY") or 0)}  # first N Gemini calls answer 503
 
 
 class FakeApis(BaseHTTPRequestHandler):
@@ -70,6 +71,10 @@ class FakeApis(BaseHTTPRequestHandler):
         if self.path.startswith("/v3/generation/"):
             return self._send(200, {"code": 0, "data": {"task_id": TASK_ID}})
         if ":generateContent" in self.path:
+            busy["left"] -= 1
+            if busy["left"] >= 0:  # HARNESS_GEMINI_BUSY: answer like an overloaded Gemini
+                return self._send(503, {"error": {"code": 503, "status": "UNAVAILABLE",
+                                                  "message": "This model is currently experiencing high demand."}})
             text = "```json\n" + json.dumps(ANALYSIS) + "\n```"
             return self._send(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": text}]}}]})
         self._send(404, {})

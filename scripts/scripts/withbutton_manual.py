@@ -12,6 +12,7 @@ from google.genai import types
 from util.inference_utils import create_model, inference
 from main import Parameters
 from tripo_client import TripoClient, TripoError
+import gemini_call
 from supabase_models import store_model, clamp_crack_percentage
 from backend_select import server_from_env
 
@@ -274,22 +275,15 @@ def analyze_artifact_with_gemini(original_bytes):
         "Return ONLY the JSON object. No preambles, no markdowns, no backticks."
     )
 
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=[
-            types.Part.from_bytes(data=original_bytes, mime_type='image/jpeg'),
-            prompt
-        ]
+    # Retries and other models when Gemini is busy (503 "high demand"): see gemini_call.py
+    response = gemini_call.generate(
+        client,
+        GEMINI_MODEL,
+        [types.Part.from_bytes(data=original_bytes, mime_type='image/jpeg'), prompt],
+        config=types.GenerateContentConfig(response_mime_type="application/json"),
     )
-
-    result_text = response.text.strip()
-    if result_text.startswith("```"):
-        result_text = result_text.split("```")[1]
-        if result_text.startswith("json"):
-            result_text = result_text[4:]
-
     print("Ответ от Gemini получен.")
-    return json.loads(result_text.strip())
+    return gemini_call.parse_json_object(response.text)
 
 
 def save_all_to_supabase(gemini_data, image_url, model_url=None):

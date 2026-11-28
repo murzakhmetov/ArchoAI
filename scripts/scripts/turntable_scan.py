@@ -181,13 +181,25 @@ def save_to_server(name, base_url, key, scan_id, artifact_id, analyzed, photos, 
     return f"{len(photo_urls)} фото, 3D-модель {'есть' if model_url else 'нет'}{note}"
 
 
+def unanalyzed_info(scan_id):
+    """Artifact fields for a scan that Gemini could not analyze."""
+    return {"name": f"Скан {scan_id[:15]} (без анализа)", "type": "Unknown", "material": "Unknown",
+            "era": "Unknown", "purpose": "Unknown", "condition": "Not analyzed", "crack_percentage": 0.0}
+
+
 def scan(table, cap):
     photos = capture_turn(table, cap)
     scan_id = time.strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
     artifact_id = str(uuid.uuid4())  # the same id on every server
     analyzed = pipeline.analyze_cracks_with_ml(photos[0])  # prints [2/5]
     glb, task_id = make_3d_model(tripo_views(photos))  # prints [3.5/5]
-    info = pipeline.analyze_artifact_with_gemini(photos[0])  # prints [4/5]
+    try:
+        info = pipeline.analyze_artifact_with_gemini(photos[0])  # prints [4/5]
+    except Exception as exc:
+        # Gemini stayed busy on every model: the photos and the model must not be lost. The artifact
+        # is saved as "pending" with placeholder data; edit the details later in the app.
+        print(f"  Gemini недоступен ({str(exc)[:160]}).\n  Скан сохраняется без описания (статус pending).")
+        info = unanalyzed_info(scan_id)
     print(f"\n[5/5] Сохранение: {info.get('name', '?')}")
     results = []
     for name, base_url, key in servers():
