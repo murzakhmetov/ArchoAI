@@ -36,10 +36,21 @@ class Turntable:
 
     def __init__(self, port=None, timeout=120.0):
         self.port = port or find_port()
-        self.serial = serial.Serial(self.port, BAUD, timeout=timeout)
+        try:
+            # exclusive: a second scanner gets a clear error at once instead of sharing the port and
+            # waiting for answers the first one reads
+            self.serial = serial.Serial(self.port, BAUD, timeout=0.5, exclusive=True)
+        except serial.SerialException as exc:
+            if "lock" in str(exc).lower() or "busy" in str(exc).lower() or getattr(exc, "errno", None) == 11:
+                raise RuntimeError(f"Поворотный стол ({self.port}) занят: возможно, сканер уже запущен в другом "
+                                   "окне терминала. Закройте его (Q) и запустите снова.") from None
+            raise RuntimeError(f"Не удалось открыть поворотный стол {self.port}: {exc}") from None
         self.hello = self._read_line(wait=5.0)  # the banner printed after the reset
         if not self.hello.startswith("ARCHOAI-TURNTABLE"):
-            self.hello = self.command("PING", wait=5.0)  # another firmware: fail fast
+            try:
+                self.hello = self.command("PING", wait=5.0)  # no banner: ask once, fail fast
+            except RuntimeError:
+                self.hello = ""
         if not self.hello.startswith("ARCHOAI-TURNTABLE"):
             raise RuntimeError(f"На {self.port} не прошивка поворотного стола (ответ: {self.hello!r}). "
                                "Прошейте её: bash turntable/flash.sh")
@@ -47,6 +58,8 @@ class Turntable:
     def _read_line(self, wait):
         end = time.monotonic() + wait
         while time.monotonic() < end:
+            # each read waits at most 0.5 s, so ``wait`` is the real limit (not the port timeout)
+            self.serial.timeout = max(0.05, min(0.5, end - time.monotonic()))
             line = self.serial.readline().decode("ascii", "replace").strip()
             if line:
                 return line

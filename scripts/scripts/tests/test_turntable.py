@@ -133,6 +133,23 @@ class TurntableProtocolTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             turntable.Turntable(port=firmware.port, timeout=0.2)
 
+    def test_a_second_scanner_gets_a_clear_busy_error_at_once(self):
+        firmware, first = self.connect()
+        started = time.monotonic()
+        with self.assertRaisesRegex(RuntimeError, "занят"):
+            turntable.Turntable(port=firmware.port)
+        self.assertLess(time.monotonic() - started, 2, "must not wait for answers the first scanner reads")
+        self.assertEqual(first.rotate(60), "OK ROT 60")  # the first connection still works
+
+    def test_a_silent_port_fails_within_seconds(self):
+        firmware = FakeFirmware(banner=False, silent=True)
+        firmware.start()
+        self.addCleanup(firmware.stop)
+        started = time.monotonic()
+        with self.assertRaises(RuntimeError):
+            turntable.Turntable(port=firmware.port)  # default timeout: the handshake must still be short
+        self.assertLess(time.monotonic() - started, 15)
+
     def test_port_from_the_environment_wins(self):
         os.environ["TURNTABLE_PORT"] = "/dev/ttyTEST9"
         self.addCleanup(os.environ.pop, "TURNTABLE_PORT", None)

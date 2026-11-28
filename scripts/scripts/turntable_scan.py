@@ -284,4 +284,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except RuntimeError as exc:  # turntable or camera missing / busy: a clear message, no traceback
+        print(f"\nОшибка: {exc}")
+        sys.exit(1)
