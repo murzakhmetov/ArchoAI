@@ -86,6 +86,17 @@ must_fail "anon rate limit: a second insert within 2 s is refused" \
   "begin; set local role anon; $INS (24.5,45,300); $INS (24.5,45,301); rollback;" "at most one anonymous insert"
 must_fail "signed-in users cannot insert sensor_data (the app only reads it, the device is anon)" \
   "begin; set local role authenticated; $INS (24.5,45,300); rollback;" "permission denied"
+INS6="insert into public.sensor_data(temperature,humidity,air_quality,soil_moisture,soil_temperature,air_ppm) values"
+ok_rows   "anon inserts a reading with soil moisture, soil temperature and air ppm" \
+  "begin; set local role anon; $INS6 (24.5,45,300,37.5,18.25,612) returning id; rollback;" '"id"'
+ok_rows   "anon may leave the soil and ppm values empty (null)" \
+  "begin; set local role anon; $INS6 (24.5,45,300,null,null,null) returning id; rollback;" '"id"'
+must_fail "anon soil moisture 101 is refused" \
+  "begin; set local role anon; $INS6 (24.5,45,300,101,18,612); rollback;" "row-level security"
+must_fail "anon soil temperature 126 is refused" \
+  "begin; set local role anon; $INS6 (24.5,45,300,40,126,612); rollback;" "row-level security"
+must_fail "anon air ppm 10001 is refused" \
+  "begin; set local role anon; $INS6 (24.5,45,300,40,18,10001); rollback;" "row-level security"
 ok_rows   "a future-dated row written by another role cannot lock the device out" \
   "begin; insert into public.sensor_data(temperature,humidity,air_quality,created_at) values (24.5,45,300,'2100-01-01'); set local role anon; $INS (24.5,45,300) returning id; rollback;" '"id"'
 

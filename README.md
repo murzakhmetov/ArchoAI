@@ -110,9 +110,21 @@ Behaviour worth knowing:
 - Reading a task and uploading or downloading files are retried with backoff on network errors, `429` and `5xx`.
 
 ### IoT Monitoring
-1. Compile and flash `monitoring.cpp` using the Arduino IDE or PlatformIO.
-2. Ensure you have the `Adafruit_SSD1306`, `DHT`, and `WiFi` libraries installed.
-3. `SUPABASE_URL` and `SUPABASE_KEY` in the source point at the Pi server. Set `WIFI_SSID` / `WIFI_PASSWORD` to the Wi-Fi network the Pi is on.
+The board measures five values; the app shows each of them with a 24 h chart (Dashboard: **Air** and **Soil**).
+
+| Value | Sensor | ESP32 pin | Column |
+| --- | --- | --- | --- |
+| Air temperature, °C | DHT11 | GPIO26 | `temperature` |
+| Air humidity, % | DHT11 | GPIO26 | `humidity` |
+| Air quality, ppm (CO2 equivalent) | MQ-135 (AO, through a divider with a 5 V module) | GPIO34 | `air_ppm` (+ raw value in `air_quality`) |
+| Soil moisture, % | capacitive soil moisture sensor v1.2 (3.3 V) | GPIO35 | `soil_moisture` |
+| Soil temperature, °C | DS18B20 waterproof probe, 4.7 kOhm pull-up to 3.3 V | GPIO4 | `soil_temperature` |
+
+1. Compile and flash `monitoring.cpp` using the Arduino IDE or PlatformIO (`bash server/esp32.sh upload` on the Pi).
+2. Ensure you have the `Adafruit_SSD1306`, `DHT`, `OneWire`, `DallasTemperature` and `WiFi` libraries installed.
+3. Calibrate once with the serial monitor (115200 baud): `SOIL_RAW_DRY` / `SOIL_RAW_WET` (raw value in dry air and in water) and `MQ135_R0_KOHM` (the "R0 for 420 ppm" value printed outdoors after the sensor has warmed up). A sensor that is not connected is sent as `null` and the app shows `--`.
+4. Apply migration `supabase/migrations/20261128000002_soil_and_air_ppm.sql` on every server first (`supabase migration up` on the Pi); until then the server refuses the new fields.
+5. `SUPABASE_URL` and `SUPABASE_KEY` in the source point at the Pi server. Set `WIFI_SSID` / `WIFI_PASSWORD` to the Wi-Fi network the Pi is on.
 
 ---
 
@@ -120,7 +132,7 @@ Behaviour worth knowing:
 
 The whole backend lives in [`supabase/`](supabase/README.md) as plain SQL migrations plus `config.toml`, so no hand-written `create table` is needed:
 
-- **Tables:** `artifacts` (`id`, `name`, `image_path`, `model_url`, `local_model_path`, `created_at`, `updated_at`, `status`, `type`, `material`, `era`, `purpose`, `condition`, `crack_percentage`, `tripo_task_id`, `model_file_id`) and `sensor_data` (`id`, `temperature`, `humidity`, `air_quality`, `created_at`), with row level security and realtime; `artifacts` has CHECK constraints, and the value ranges of `sensor_data` are enforced by an insert policy. The first migration, `20260101000000_baseline_tables.sql`, creates the original tables on a fresh project.
+- **Tables:** `artifacts` (`id`, `name`, `image_path`, `model_url`, `local_model_path`, `created_at`, `updated_at`, `status`, `type`, `material`, `era`, `purpose`, `condition`, `crack_percentage`, `tripo_task_id`, `model_file_id`) and `sensor_data` (`id`, `temperature` and `humidity` of the air, `air_quality` (raw MQ-135 value), `air_ppm`, `soil_moisture`, `soil_temperature`, `created_at`), with row level security and realtime; `artifacts` has CHECK constraints, and the value ranges of `sensor_data` are enforced by an insert policy. The first migration, `20260101000000_baseline_tables.sql`, creates the original tables on a fresh project.
 - **Model batches:** buckets `models-01` to `models-04` (public, 50 MB per file, `.glb` only) are filled in order. `pick_model_bucket(size)` returns the first batch with room, `register_model_file()` records each file in `model_files`, and a global cap (20 GB on the Pi, enforced by storage policies for every bucket) stops uploads before the SD card is full.
 - **Buckets do not add capacity.** The batches are a logical split of the cap. For more room (a larger card), raise `app_limits.storage_total_cap_bytes` and the capacities in `model_buckets`.
 - **Where it runs:** on the Raspberry Pi (`server/README.md`): `bash server/setup.sh` starts the stack, applies every file of `supabase/migrations/` and creates the buckets from `config.toml`; a new migration is applied with `supabase migration up`. On the Pi the storage cap is 20 GB (migration `20261126000001_pi_local_server.sql`) instead of the cloud's 900 MB. `bash supabase/tests/smoke.sh` (33 policy checks) and `python3 supabase/tests/migration_drift.py` run against the Pi by default; `REMOTE=<ref>` / `--ref <ref>` still target a cloud project. Details and the list of open security decisions are in [`supabase/README.md`](supabase/README.md).

@@ -139,6 +139,9 @@ class SupabaseService {
           temperature: 20.0 + (i % 5),
           humidity: 45.0 + (i % 10),
           airQuality: 400.0 + (i * 20),
+          airPpm: 450.0 + (i % 6) * 25,
+          soilMoisture: 42.0 - (i % 8),
+          soilTemperature: 18.0 + (i % 4) * 0.5,
           createdAt: time,
         ));
       }

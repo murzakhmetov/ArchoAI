@@ -9,6 +9,14 @@ abstract class AppStrings {
   String get temperature;
   String get humidity;
   String get airQuality;
+  String get airTemperature;
+  String get airHumidity;
+  String get soilTemperature;
+  String get soilMoisture;
+  String get airSection;
+  String get soilSection;
+  String get noData;
+  String get noSoilSensor;
   
   String get currentReading;
   String get optimalRange;
@@ -85,6 +93,14 @@ class RuStrings extends AppStrings {
   @override String get temperature => 'Температура';
   @override String get humidity => 'Влажность';
   @override String get airQuality => 'Качество воздуха';
+  @override String get airTemperature => 'Температура воздуха';
+  @override String get airHumidity => 'Влажность воздуха';
+  @override String get soilTemperature => 'Температура почвы';
+  @override String get soilMoisture => 'Влажность почвы';
+  @override String get airSection => 'Воздух';
+  @override String get soilSection => 'Почва';
+  @override String get noData => 'Нет данных';
+  @override String get noSoilSensor => 'Датчик почвы не прислал данные';
   
   @override String get currentReading => 'ТЕКУЩИЙ ПОКАЗАТЕЛЬ';
   @override String get optimalRange => 'ОПТИМАЛЬНЫЙ ДИАПАЗОН';
@@ -184,6 +200,14 @@ class EnStrings extends AppStrings {
   @override String get temperature => 'Temperature';
   @override String get humidity => 'Humidity';
   @override String get airQuality => 'Air Quality';
+  @override String get airTemperature => 'Air Temperature';
+  @override String get airHumidity => 'Air Humidity';
+  @override String get soilTemperature => 'Soil Temperature';
+  @override String get soilMoisture => 'Soil Moisture';
+  @override String get airSection => 'Air';
+  @override String get soilSection => 'Soil';
+  @override String get noData => 'No data';
+  @override String get noSoilSensor => 'The soil sensor has not sent data';
   
   @override String get currentReading => 'CURRENT READING';
   @override String get optimalRange => 'OPTIMAL RANGE';
@@ -266,6 +290,10 @@ class RU {
   static String get temperature => S.current.temperature;
   static String get humidity => S.current.humidity;
   static String get airQuality => S.current.airQuality;
+  static String get airTemperature => S.current.airTemperature;
+  static String get airHumidity => S.current.airHumidity;
+  static String get soilTemperature => S.current.soilTemperature;
+  static String get soilMoisture => S.current.soilMoisture;
   static String get currentReading => S.current.currentReading;
   static String get optimalRange => S.current.optimalRange;
   static String get aboveRecommended => S.current.aboveRecommended;

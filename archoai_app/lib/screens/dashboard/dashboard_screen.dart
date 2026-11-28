@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../config/app_colors.dart';
 import '../../config/localization.dart';
 import '../../models/sensor_data.dart';
+import '../../models/sensor_metric.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/metric_card.dart';
 import '../chat/ai_chat_screen.dart';
@@ -152,41 +153,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  List<double> _extractSparkline(List<SensorData> data, String field) {
-    final values = data.map((d) {
-      switch (field) {
-        case 'temperature':
-          return d.temperature;
-        case 'humidity':
-          return d.humidity;
-        case 'air_quality':
-          return d.airQuality;
-        default:
-          return 0.0;
-      }
-    }).toList();
+  List<double> _extractSparkline(List<SensorData> data, SensorMetric metric) {
+    final values = data.map(metric.valueOf).whereType<double>().toList();
     if (values.length > 20) {
       return values.sublist(values.length - 20);
     }
     return values;
   }
 
-  void _navigateToDetail(String title, String unit, IconData icon, Color color) {
-    if (_history.isEmpty) return;
-    
+  void _navigateToDetail(SensorMetric metric) {
+    // Nothing to chart (e.g. no soil sensor yet).
+    if (!_history.any((d) => metric.valueOf(d) != null)) return;
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => MetricDetailScreen(
-          title: title,
-          unit: unit,
-          icon: icon,
-          accentColor: color,
+          metric: metric,
           // A snapshot: the live list keeps changing under the realtime stream.
           history: List<SensorData>.unmodifiable(_history),
         ),
       ),
     );
+  }
+
+  Widget _buildMetricCard(SensorMetric metric) {
+    final value = metric.valueOf(_latestData!);
+    return MetricCard(
+      title: metric.label,
+      value: value == null ? '--' : value.toStringAsFixed(metric.decimals),
+      unit: metric.unit,
+      status: metric.statusOf(_latestData!) ?? S.current.noData,
+      icon: metric.icon,
+      accentColor: metric.color,
+      sparklineData: _extractSparkline(_history, metric),
+      onTap: () => _navigateToDetail(metric),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.textSecondary, size: 14),
+          const SizedBox(width: 8),
+          Text(
+            title.toUpperCase(),
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildMetricSection(String title, IconData icon, Iterable<SensorMetric> metrics) {
+    return [
+      _buildSectionHeader(title, icon),
+      for (final metric in metrics) ...[
+        _buildMetricCard(metric),
+        const SizedBox(height: 12),
+      ],
+    ];
   }
 
   @override
@@ -384,50 +417,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      // Temperature card
-                      MetricCard(
-                        title: RU.temperature,
-                        value: _latestData!.temperature.toStringAsFixed(1),
-                        unit: '°C',
-                        status: _latestData!.temperatureStatus,
-                        icon: Icons.thermostat_outlined,
-                        accentColor: AppColors.cyan,
-                        sparklineData: _extractSparkline(_history, 'temperature'),
-                        onTap: () => _navigateToDetail(
-                          RU.temperature, '°C', Icons.thermostat_outlined, AppColors.cyan
-                        ),
+                      ..._buildMetricSection(
+                        S.current.airSection,
+                        Icons.air_rounded,
+                        SensorMetric.values.where((m) => !m.isSoil),
                       ),
-                      const SizedBox(height: 12),
-
-                      // Humidity card
-                      MetricCard(
-                        title: RU.humidity,
-                        value: _latestData!.humidity.toStringAsFixed(1),
-                        unit: '%',
-                        status: _latestData!.humidityStatus,
-                        icon: Icons.water_drop_outlined,
-                        accentColor: AppColors.mint,
-                        sparklineData: _extractSparkline(_history, 'humidity'),
-                        onTap: () => _navigateToDetail(
-                          RU.humidity, '%', Icons.water_drop_outlined, AppColors.mint
-                        ),
+                      const SizedBox(height: 4),
+                      ..._buildMetricSection(
+                        S.current.soilSection,
+                        Icons.grass_rounded,
+                        SensorMetric.values.where((m) => m.isSoil),
                       ),
-                      const SizedBox(height: 12),
-
-                      // Air Quality card
-                      MetricCard(
-                        title: RU.airQuality,
-                        value: _latestData!.airQuality.toStringAsFixed(0),
-                        unit: 'PPM',
-                        status: _latestData!.airQualityStatus,
-                        icon: Icons.air_rounded,
-                        accentColor: AppColors.amber,
-                        sparklineData: _extractSparkline(_history, 'air_quality'),
-                        onTap: () => _navigateToDetail(
-                          RU.airQuality, 'PPM', Icons.air_rounded, AppColors.amber
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 4),
 
                       // Summary card
                       GlassCard(
@@ -524,11 +525,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _getOverallStatus() {
     if (_latestData == null) return 'Неизвестно';
-    final statuses = [
-      _latestData!.temperatureStatus,
-      _latestData!.humidityStatus,
-      _latestData!.airQualityStatus,
-    ];
+    // Readings the row does not have (no soil sensor) do not count.
+    final statuses = SensorMetric.values.map((m) => m.statusOf(_latestData!)).whereType<String>();
     if (statuses.contains('CRITICAL')) return 'Критично';
     if (statuses.contains('WARNING')) return 'Внимание';
     return 'Оптимально';

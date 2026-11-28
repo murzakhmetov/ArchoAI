@@ -7,6 +7,10 @@ TEST_HUMIDITY = 33.25   # the end-to-end tests of the app write this reading and
 TEST_AIR_QUALITY = 3999
 BATCH = 500
 COLUMNS = ("created_at", "temperature", "humidity", "air_quality")
+# Added by migration 20261128000002 (nullable). They are copied but are NOT part of a reading's identity:
+# the key stays the same as before, so readings copied earlier are not copied a second time, and a server
+# that does not have these columns yet still recognises the reading.
+EXTRA_COLUMNS = ("soil_moisture", "soil_temperature", "air_ppm")
 
 
 def row_key(row):
@@ -29,7 +33,8 @@ def usable(row):
 
 
 def fetch(server, since, log):
-    params = {"select": "id," + ",".join(COLUMNS), "order": "created_at.asc,id.asc",
+    # select=* : a server that does not have EXTRA_COLUMNS yet must still answer.
+    params = {"select": "*", "order": "created_at.asc,id.asc",
               "created_at": ["not.is.null"]}  # created_at is nullable and NULLs sort last: keyset paging needs a value
     if since is not None:
         params["created_at"].append("gte." + fmt_ts(since))
@@ -40,8 +45,29 @@ def fetch(server, since, log):
     return good
 
 
-def payload(row):
-    return {name: row[name] for name in COLUMNS}
+def payload(row, extras=True):
+    """The insert body. Every row of one batch has the same keys (PostgREST requires that)."""
+    body = {name: row[name] for name in COLUMNS}
+    if extras:
+        body.update({name: row.get(name) for name in EXTRA_COLUMNS})
+    return body
+
+
+def lacks_extra_columns(err):
+    """The target has not been migrated yet: PostgREST does not know one of EXTRA_COLUMNS."""
+    text = str(err)
+    return err.kind == "http" and err.status == 400 and (
+        "PGRST204" in text or any(name in text for name in EXTRA_COLUMNS))
+
+
+def _insert(dst, rows):
+    """Inserts with the extra columns, or without them when the target does not have them yet."""
+    try:
+        dst.insert("sensor_data", [payload(row) for row in rows])
+    except ServerError as err:
+        if not lacks_extra_columns(err):
+            raise
+        dst.insert("sensor_data", [payload(row, extras=False) for row in rows])
 
 
 def missing_rows(src_rows, dst_keys, guard, poison=()):
@@ -67,7 +93,7 @@ def _insert_one_by_one(dst, dst_side, chunk, state, log):
     done = poisoned = 0
     for key, row in chunk:
         try:
-            dst.insert("sensor_data", [payload(row)])
+            _insert(dst, [row])
             state.record_copied(dst_side, key)
             done += 1
         except ServerError as err:
@@ -88,7 +114,7 @@ def push(dst, dst_side, wanted, state, log):
     for start in range(0, len(wanted), BATCH):
         chunk = wanted[start:start + BATCH]
         try:
-            dst.insert("sensor_data", [payload(row) for _, row in chunk])
+            _insert(dst, [row for _, row in chunk])
             for key, _ in chunk:
                 state.record_copied(dst_side, key)
             copied += len(chunk)

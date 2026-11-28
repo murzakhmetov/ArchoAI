@@ -1,6 +1,6 @@
 import 'package:archoai_app/config/app_colors.dart';
-import 'package:archoai_app/config/localization.dart';
 import 'package:archoai_app/models/sensor_data.dart';
+import 'package:archoai_app/models/sensor_metric.dart';
 import 'package:archoai_app/screens/chat/ai_chat_screen.dart';
 import 'package:archoai_app/screens/dashboard/dashboard_screen.dart';
 import 'package:archoai_app/screens/dashboard/metric_detail_screen.dart';
@@ -128,13 +128,10 @@ void main() {
             ),
         ];
 
-    Future<LineChartData> pumpDetail(WidgetTester tester, String title, List<SensorData> data) async {
+    Future<LineChartData> pumpDetail(WidgetTester tester, SensorMetric metric, List<SensorData> data) async {
       await tester.pumpWidget(MaterialApp(
         home: MetricDetailScreen(
-          title: title,
-          unit: 'PPM',
-          icon: Icons.air_rounded,
-          accentColor: AppColors.amber,
+          metric: metric,
           history: data,
         ),
       ));
@@ -150,28 +147,66 @@ void main() {
 
     testWidgets('detail chart: air quality of 125-173 is inside the axis and the chart clips', (tester) async {
       // The old fixed axis (300-600) pushed this data out of the card.
-      final chart = await pumpDetail(tester, RU.airQuality, history((i) => 125.0 + i * 2));
+      final chart = await pumpDetail(tester, SensorMetric.airQuality, history((i) => 125.0 + i * 2));
 
+      // The axis covers the data and the 0-1000 ppm safe zone.
       expect(chart.minY, 0);
-      expect(chart.maxY, 600);
+      expect(chart.maxY, 1200);
       expectAllSpotsVisible(chart);
       expect(chart.clipData.top && chart.clipData.bottom, isTrue);
     });
 
     testWidgets('detail chart: raw ADC values up to 4080 get a matching axis', (tester) async {
-      final chart = await pumpDetail(tester, RU.airQuality, history((i) => i * 170.0));
+      final chart = await pumpDetail(tester, SensorMetric.airQuality, history((i) => i * 170.0));
 
       expect(chart.maxY, greaterThanOrEqualTo(4080));
       expectAllSpotsVisible(chart);
     });
 
     testWidgets('detail chart: temperature axis follows the data and shows the safe zone', (tester) async {
-      final chart = await pumpDetail(tester, RU.temperature, history((i) => 400.0));
+      final chart = await pumpDetail(tester, SensorMetric.airTemperature, history((i) => 400.0));
 
       expectAllSpotsVisible(chart);
       for (final line in chart.extraLinesData.horizontalLines) {
         expect(line.y, inInclusiveRange(chart.minY, chart.maxY));
       }
+    });
+
+    testWidgets('detail chart: soil moisture plots only the rows that have it', (tester) async {
+      final data = [
+        for (var i = 0; i < 10; i++)
+          SensorData(
+            id: i,
+            temperature: 21,
+            humidity: 45,
+            airQuality: 300,
+            soilMoisture: i < 4 ? null : 30.0 + i, // older rows: no soil sensor yet
+            createdAt: DateTime(2026, 5, 1).add(Duration(hours: i)),
+          ),
+      ];
+      final chart = await pumpDetail(tester, SensorMetric.soilMoisture, data);
+
+      expect(chart.lineBarsData.single.spots.map((s) => s.y), [34, 35, 36, 37, 38, 39]);
+      expectAllSpotsVisible(chart);
+      expect(find.text('39.0'), findsNWidgets(2)); // current reading and peak
+      expect(find.text('34.0'), findsOneWidget); // lowest: the rows without a value do not count as 0
+    });
+
+    testWidgets('detail chart: air quality uses ppm when the row has it', (tester) async {
+      final data = [
+        for (var i = 0; i < 5; i++)
+          SensorData(
+            id: i,
+            temperature: 21,
+            humidity: 45,
+            airQuality: 3000,
+            airPpm: 600.0 + i,
+            createdAt: DateTime(2026, 5, 1).add(Duration(hours: i)),
+          ),
+      ];
+      final chart = await pumpDetail(tester, SensorMetric.airQuality, data);
+
+      expect(chart.lineBarsData.single.spots.map((s) => s.y), [600, 601, 602, 603, 604]);
     });
 
     testWidgets('chat: a back button appears only when the screen was pushed', (tester) async {

@@ -20,6 +20,10 @@ class AppColors {
   static const Color red = Color(0xFFFF4757);
   static const Color green = Color(0xFF2ED573);
 
+  //  Soil readings 
+  static const Color soil = Color(0xFFFF8A5B);
+  static const Color leaf = Color(0xFFB4F05A);
+
   //  Text 
   static const Color textPrimary = Color(0xFFFFFFFF);
   static const Color textSecondary = Color(0xFF6B7280);

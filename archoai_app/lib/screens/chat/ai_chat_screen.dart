@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../models/sensor_metric.dart';
 import '../../config/app_colors.dart';
 import '../../config/localization.dart';
 import '../../services/ai_service.dart';
@@ -55,8 +56,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
       final artifacts =
           await _supabaseService.getArtifacts(seedIfEmpty: false);
       
-      String env = history.isNotEmpty 
-          ? 'Temp: ${history.last.temperature}°C, Hum: ${history.last.humidity}%, Air: ${history.last.airQuality}PPM'
+      String env = history.isNotEmpty
+          ? SensorMetric.values
+              .map((m) => (m, m.valueOf(history.last)))
+              .where((e) => e.$2 != null)
+              .map((e) => '${e.$1.englishName}: ${e.$2}${e.$1.unit}')
+              .join(', ')
           : 'No sensor data';
       
       String arts = artifacts.map((a) => '${a.name} (${a.condition}, ${a.crackPercentage}% cracks)').join(', ');

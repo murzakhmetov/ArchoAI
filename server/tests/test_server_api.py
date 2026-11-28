@@ -174,10 +174,30 @@ class DeviceTests(ServerTestCase):
         self.assertEqual(len(rows), 1, rows)
         self.delete_rows("sensor_data", "id", rows[0]["id"])
 
+    def test_reading_with_soil_and_ppm_is_stored(self):
+        """The current firmware body (migration 20261128000002); a missing sensor goes out as null."""
+        for values in ({"temperature": 24.5, "humidity": 45.25, "air_quality": 3336.0,
+                        "air_ppm": 612.0, "soil_moisture": 37.5, "soil_temperature": 18.25},
+                       {"temperature": 24.5, "humidity": 45.25, "air_quality": 3337.0,
+                        "air_ppm": None, "soil_moisture": None, "soil_temperature": None}):
+            with self.subTest(values=values):
+                since = self.db_now()
+                response = self.insert_reading_as_device(values)
+                self.assertIn(response.status_code, (200, 201), response.text)
+                rows = self.admin_select("sensor_data?select=id,air_ppm,soil_moisture,soil_temperature"
+                                         f"&air_quality=eq.{values['air_quality']}&created_at=gte.{since}")
+                self.assertEqual(len(rows), 1, rows)
+                self.delete_rows("sensor_data", "id", rows[0]["id"])
+                self.assertEqual((rows[0]["air_ppm"], rows[0]["soil_moisture"], rows[0]["soil_temperature"]),
+                                 (values["air_ppm"], values["soil_moisture"], values["soil_temperature"]))
+
     def test_values_out_of_range_are_refused(self):
         for values in ({"temperature": 24.5, "humidity": 145.0, "air_quality": 300.0},
                        {"temperature": 24.5, "humidity": 45.0, "air_quality": 4096.0},
-                       {"temperature": 126.0, "humidity": 45.0, "air_quality": 300.0}):
+                       {"temperature": 126.0, "humidity": 45.0, "air_quality": 300.0},
+                       {"temperature": 24.5, "humidity": 45.0, "air_quality": 300.0, "soil_moisture": 101.0},
+                       {"temperature": 24.5, "humidity": 45.0, "air_quality": 300.0, "soil_temperature": -56.0},
+                       {"temperature": 24.5, "humidity": 45.0, "air_quality": 300.0, "air_ppm": 10001.0}):
             with self.subTest(values=values):
                 response = self.insert_reading_as_device(values)
                 self.assertIn(response.status_code, (401, 403), response.text)

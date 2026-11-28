@@ -70,6 +70,7 @@ class FakeServer:
         self.writes = []
         self.modified = {}          # object key -> datetime (Last-Modified); absent: the header is left out
         self.reject_sensor = None   # predicate(row) -> True: a 400 / 23514 CHECK violation, as the real table gives
+        self.no_soil_columns = False  # True: a server without migration 20261128000002 (PGRST204 on the new columns)
         self.ticks = 0
         self.next_id = 1
 
@@ -134,6 +135,9 @@ class FakeServer:
 
     def rest_post(self, table, query, rows):
         if table == "sensor_data":
+            if self.no_soil_columns and any("soil_moisture" in row for row in rows):
+                return reply(400, {"code": "PGRST204",
+                                   "message": "Could not find the 'air_ppm' column of 'sensor_data' in the schema cache"})
             if self.reject_sensor and any(self.reject_sensor(row) for row in rows):
                 return reply(400, {"code": "23514", "message": "new row violates check constraint"})
             for row in rows:

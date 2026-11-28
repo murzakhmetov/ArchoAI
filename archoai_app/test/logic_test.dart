@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:archoai_app/models/sensor_data.dart';
+import 'package:archoai_app/models/sensor_metric.dart';
 import 'package:archoai_app/screens/dashboard/dashboard_screen.dart';
 import 'package:archoai_app/screens/dashboard/metric_detail_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,6 +49,80 @@ void main() {
         final data = SensorData.fromJson(json);
         expect(DateTime.now().difference(data.createdAt).inSeconds.abs(), lessThan(5));
       }
+    });
+  });
+
+  group('soil and ppm readings', () {
+    test('fromJson reads soil moisture, soil temperature and air ppm', () {
+      final data = SensorData.fromJson({
+        'temperature': 21.5,
+        'humidity': 48,
+        'air_quality': 1800,
+        'air_ppm': 612,
+        'soil_moisture': 37.5,
+        'soil_temperature': 18.25,
+        'created_at': '2026-03-01T10:20:30+00:00',
+      });
+
+      expect(data.airPpm, 612.0);
+      expect(data.soilMoisture, 37.5);
+      expect(data.soilTemperature, 18.25);
+      expect(data.airQualityPpm, 612.0);
+    });
+
+    test('older rows have no soil values and show the raw air value', () {
+      final data = SensorData.fromJson({'temperature': 21, 'humidity': 40, 'air_quality': 170});
+
+      expect(data.soilMoisture, isNull);
+      expect(data.soilTemperature, isNull);
+      expect(data.airPpm, isNull);
+      expect(data.airQualityPpm, 170.0);
+      expect(data.soilMoistureStatus, isNull);
+      expect(data.soilTemperatureStatus, isNull);
+      expect(SensorMetric.soilMoisture.valueOf(data), isNull);
+      expect(SensorMetric.soilMoisture.statusOf(data), isNull);
+    });
+
+    test('toJson writes the new columns only when they are set', () {
+      final json = SensorData(
+        temperature: 20,
+        humidity: 40,
+        airQuality: 300,
+        airPpm: 500,
+        soilMoisture: 33,
+        createdAt: DateTime.utc(2026),
+      ).toJson();
+
+      expect(json['air_ppm'], 500.0);
+      expect(json['soil_moisture'], 33.0);
+      expect(json.containsKey('soil_temperature'), isFalse);
+    });
+
+    const moisture = <(double, String)>[
+      (9.9, 'CRITICAL'), (10.0, 'WARNING'), (19.9, 'WARNING'), (20.0, 'NORMAL'),
+      (60.0, 'NORMAL'), (60.1, 'WARNING'), (80.0, 'WARNING'), (80.1, 'CRITICAL'),
+    ];
+    const soilTemp = <(double, String)>[
+      (-0.1, 'CRITICAL'), (0.0, 'WARNING'), (9.9, 'WARNING'), (10.0, 'NORMAL'),
+      (25.0, 'NORMAL'), (25.1, 'WARNING'), (35.0, 'WARNING'), (35.1, 'CRITICAL'),
+    ];
+    const ppm = <(double, String)>[
+      (420.0, 'NORMAL'), (1000.0, 'NORMAL'), (1000.1, 'WARNING'), (2000.0, 'WARNING'), (2000.1, 'CRITICAL'),
+    ];
+    SensorData row({double? m, double? t, double? p}) => SensorData(
+        temperature: 21, humidity: 45, airQuality: 3000, airPpm: p, soilMoisture: m, soilTemperature: t,
+        createdAt: DateTime.utc(2026));
+    for (final (value, expected) in moisture) {
+      test('soil moisture $value is $expected', () => expect(row(m: value).soilMoistureStatus, expected));
+    }
+    for (final (value, expected) in soilTemp) {
+      test('soil temperature $value is $expected', () => expect(row(t: value).soilTemperatureStatus, expected));
+    }
+    for (final (value, expected) in ppm) {
+      test('air ppm $value is $expected', () => expect(row(p: value).airPpmStatus, expected));
+    }
+    test('without ppm the raw value status is used', () {
+      expect(row().airPpmStatus, 'CRITICAL'); // raw 3000
     });
   });
 

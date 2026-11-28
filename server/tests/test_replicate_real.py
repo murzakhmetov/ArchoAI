@@ -222,6 +222,35 @@ class PoisonTests(ReplicateCase):
         self.assertEqual(self.state().get("poison", {}).get("remote", []), [])
 
 
+class SoilColumnsTests(ReplicateCase):
+    """Soil moisture, soil temperature and air ppm (migration 20261128000002) travel with a reading."""
+
+    def test_the_new_values_are_copied(self):
+        self.net.local.sensors.append({"id": 1, **reading("2026-11-26T10:00:00Z"),
+                                       "soil_moisture": 37.5, "soil_temperature": 18.25, "air_ppm": 612.0})
+        code, out = self.run_main()
+        self.assertEqual(code, 0, out)
+        [row] = self.net.remote.sensors
+        self.assertEqual((row["soil_moisture"], row["soil_temperature"], row["air_ppm"]), (37.5, 18.25, 612.0))
+
+    def test_a_server_without_the_new_columns_still_gets_the_reading_once(self):
+        self.net.remote.no_soil_columns = True
+        self.net.local.sensors.append({"id": 1, **reading("2026-11-26T10:00:00Z"),
+                                       "soil_moisture": 37.5, "soil_temperature": 18.25, "air_ppm": 612.0})
+        for _ in range(2):
+            code, out = self.run_main()
+            self.assertEqual(code, 0, out)
+        self.assertEqual(len(self.net.remote.sensors), 1)
+        self.assertNotIn("soil_moisture", self.net.remote.sensors[0])
+        self.assertNotIn("refused for good", out)
+
+    def test_old_rows_without_the_new_values_are_copied(self):
+        self.net.local.sensors.append({"id": 1, **reading("2026-11-26T10:00:00Z")})
+        code, out = self.run_main()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(self.net.remote.sensors), 1)
+
+
 class NetworkSkipTests(ReplicateCase):
     def test_many_artifacts_skipped_for_network_reasons_fail_the_run(self):
         for n in range(12):

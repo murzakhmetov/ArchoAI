@@ -6,6 +6,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../config/app_colors.dart';
 import '../../config/localization.dart';
 import '../../models/sensor_data.dart';
+import '../../models/sensor_metric.dart';
 import '../../widgets/glass_card.dart';
 import '../../services/ai_service.dart';
 
@@ -69,20 +70,19 @@ double _niceInterval(double span) {
 }
 
 class MetricDetailScreen extends StatefulWidget {
-  final String title;
-  final String unit;
-  final IconData icon;
-  final Color accentColor;
+  final SensorMetric metric;
   final List<SensorData> history;
 
   const MetricDetailScreen({
     super.key,
-    required this.title,
-    required this.unit,
-    required this.icon,
-    required this.accentColor,
+    required this.metric,
     required this.history,
   });
+
+  String get title => metric.label;
+  String get unit => metric.unit;
+  IconData get icon => metric.icon;
+  Color get accentColor => metric.color;
 
   @override
   State<MetricDetailScreen> createState() => _MetricDetailScreenState();
@@ -92,6 +92,10 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
   final AiService _aiService = AiService();
   String? _aiInsight;
   bool _isLoadingAi = true;
+
+  // Only the rows that have this reading: older rows have no soil values.
+  late final List<SensorData> _points =
+      widget.history.where((d) => widget.metric.valueOf(d) != null).toList();
 
   @override
   void initState() {
@@ -103,22 +107,19 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
     setState(() => _isLoadingAi = true);
     
     final Map<String, dynamic> summary = {};
-    for (var m in ['Temperature', 'Humidity', 'Air Quality']) {
-      final List<double> vals = widget.history.map((d) {
-        if (m == 'Temperature') return d.temperature;
-        if (m == 'Humidity') return d.humidity;
-        return d.airQuality;
-      }).toList();
-      
+    for (final m in SensorMetric.values) {
+      final List<double> vals = widget.history.map(m.valueOf).whereType<double>().toList();
+
       if (vals.isNotEmpty) {
         final avg = vals.reduce((a, b) => a + b) / vals.length;
         final max = vals.reduce((a, b) => a > b ? a : b);
-        summary[m] = 'Current: ${vals.last}, Avg: ${avg.toStringAsFixed(1)}, Peak: $max';
+        summary['${m.englishName} (${m.unit})'] =
+            'Current: ${vals.last}, Avg: ${avg.toStringAsFixed(1)}, Peak: $max';
       }
     }
 
     final insight = await _aiService.getComprehensiveInsight(
-      targetMetric: widget.title,
+      targetMetric: widget.metric.englishName,
       allMetricsSummary: summary,
     );
 
@@ -229,11 +230,7 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final List<double> values = widget.history.map((d) {
-      if (widget.title == RU.temperature) return d.temperature;
-      if (widget.title == RU.humidity) return d.humidity;
-      return d.airQuality;
-    }).toList();
+    final List<double> values = _points.map((d) => widget.metric.valueOf(d)!).toList();
 
     final double currentVal = values.isNotEmpty ? values.last : 0;
     final double avg = values.isEmpty ? 0 : values.reduce((a, b) => a + b) / values.length;
@@ -391,7 +388,7 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
                               const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
                               children: [
                                 TextSpan(
-                                  text: DateFormat('HH:mm').format(widget.history[spot.x.toInt()].createdAt.toLocal()),
+                                  text: DateFormat('HH:mm').format(_points[spot.x.toInt()].createdAt.toLocal()),
                                   style: TextStyle(color: widget.accentColor, fontWeight: FontWeight.normal, fontSize: 11),
                                 ),
                               ],
@@ -421,25 +418,25 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
                           interval: 1,
                           getTitlesWidget: (value, meta) {
                             final index = value.toInt();
-                            if (index < 0 || index >= widget.history.length) return const SizedBox();
+                            if (index < 0 || index >= _points.length) return const SizedBox();
                             
                             final Set<int> targetIndices = {
                               0, 
-                              (widget.history.length / 4).floor(), 
-                              (widget.history.length / 2).floor(), 
-                              (3 * widget.history.length / 4).floor(), 
-                              widget.history.length - 1
+                              (_points.length / 4).floor(), 
+                              (_points.length / 2).floor(), 
+                              (3 * _points.length / 4).floor(), 
+                              _points.length - 1
                             };
                             if (!targetIndices.contains(index)) return const SizedBox();
                             
                             String label;
                             if (index == 0) {
                               label = '-24ч';
-                            } else if (index == (widget.history.length / 4).floor()) {
+                            } else if (index == (_points.length / 4).floor()) {
                               label = '-18ч';
-                            } else if (index == (widget.history.length / 2).floor()) {
+                            } else if (index == (_points.length / 2).floor()) {
                               label = '-12ч';
-                            } else if (index == (3 * widget.history.length / 4).floor()) {
+                            } else if (index == (3 * _points.length / 4).floor()) {
                               label = '-6ч';
                             } else {
                               label = 'СЕЙЧАС';
@@ -680,10 +677,10 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
     );
   }
 
-  double _getSafeMin() => widget.title == RU.temperature ? 18 : (widget.title == RU.humidity ? 40 : 0);
-  double _getSafeMax() => widget.title == RU.temperature ? 22 : (widget.title == RU.humidity ? 50 : 500);
-  // Humidity and air quality cannot go below zero; temperature has no such limit.
-  double? _getAxisFloor() => widget.title == RU.temperature ? null : 0;
+  double _getSafeMin() => widget.metric.safeMin;
+  double _getSafeMax() => widget.metric.safeMax;
+  // Humidity, moisture and air quality cannot go below zero; temperature has no such limit.
+  double? _getAxisFloor() => widget.metric.axisFloor;
 
   String _getStatusText(double val, double min, double max) {
     if (val < min) return RU.belowRecommended;
