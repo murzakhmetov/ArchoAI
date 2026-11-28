@@ -10,7 +10,8 @@ the mobile app:
 
     cd scripts/scripts && ./venv/bin/python turntable_scan.py
 
-Keys in the terminal: SPACE (or R) starts a scan (the whole chain: 6 photos on the turntable, crack detection,
+A window shows the live camera picture and the scan progress (SCAN_PREVIEW=0: no window; without a
+desktop, e.g. over SSH, none is opened). Keys in the terminal or in that window: SPACE (or R) starts a scan (the whole chain: 6 photos on the turntable, crack detection,
 upload, Tripo 3D model, Gemini analysis, database), Q (or Ctrl+C) ends the script.
 Settings (archoai_app/.env or the environment): SUPABASE_URL, SUPABASE_KEY (the Pi),
 SUPABASE_FALLBACK_URL, SUPABASE_FALLBACK_KEY (the cloud; empty: the Pi only), GEMINI_API_KEY,
@@ -24,6 +25,7 @@ import os
 import select
 import sys
 import termios
+import threading
 import time
 import tty
 import uuid
@@ -38,6 +40,7 @@ from backend_select import load_server_config
 from supabase_models import clamp_crack_percentage, store_model
 from tripo_client import TripoClient, TripoError
 from glb_shrink import model_for_server
+from camera_view import CameraView, preview_wanted
 from turntable import Turntable
 
 SCAN_STEPS = int(os.getenv("SCAN_STEPS") or 6)
@@ -69,26 +72,17 @@ def open_camera():
     return cap
 
 
-def take_photo(cap):
-    for _ in range(5):  # drop the frames buffered while the table was turning
-        cap.grab()
-    ok, frame = cap.read()
-    if not ok or frame is None:
-        raise RuntimeError("Камера не вернула кадр")
-    ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
-    if not ok:
-        raise RuntimeError("Не удалось сжать кадр в JPEG")
-    return buffer.tobytes()
-
-
-def capture_turn(table, cap):
+def capture_turn(table, view):
     """One full turn: photo, turn by one step, ... The table ends where it started."""
     print(f"\n[1/5] Съёмка: {SCAN_STEPS} фото, поворот по {STEP_DEGREES:g}°")
     photos = []
     for i in range(SCAN_STEPS):
-        time.sleep(SETTLE_SECONDS)
-        photos.append(take_photo(cap))
-        print(f"  Фото {i + 1}/{SCAN_STEPS} ({i * STEP_DEGREES:g}°) снято. Поворот на {STEP_DEGREES:g}°...")
+        angle = f"{i * STEP_DEGREES:g}°"
+        view.set_status(f"Фото {i + 1}/{SCAN_STEPS} ({angle})")
+        time.sleep(SETTLE_SECONDS)  # the table and the artifact stop shaking
+        photos.append(view.photo(after=time.monotonic()))
+        print(f"  Фото {i + 1}/{SCAN_STEPS} ({angle}) снято. Поворот на {STEP_DEGREES:g}°...")
+        view.set_status(f"Фото {i + 1}/{SCAN_STEPS} снято, поворот на {STEP_DEGREES:g}°...")
         table.rotate(STEP_DEGREES)
     print(f"  Полный оборот выполнен, стол вернулся в начальное положение.")
     return photos
@@ -210,12 +204,15 @@ def unanalyzed_info(scan_id):
             "era": "Unknown", "purpose": "Unknown", "condition": "Not analyzed", "crack_percentage": 0.0}
 
 
-def scan(table, cap):
-    photos = capture_turn(table, cap)
+def scan(table, view):
+    photos = capture_turn(table, view)
     scan_id = time.strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
     artifact_id = str(uuid.uuid4())  # the same id on every server
+    view.set_status("Поиск трещин (DeepCrack)...")
     analyzed = pipeline.analyze_cracks_with_ml(photos[0])  # prints [2/5]
+    view.set_status("3D-модель (Tripo), 1-3 минуты...")
     glb, task_id = make_3d_model(tripo_views(photos))  # prints [3.5/5]
+    view.set_status("Анализ артефакта (Gemini)...")
     try:
         info = pipeline.analyze_artifact_with_gemini(photos[0])  # prints [4/5]
     except Exception as exc:
@@ -224,6 +221,7 @@ def scan(table, cap):
         print(f"  Gemini недоступен ({str(exc)[:160]}).\n  Скан сохраняется без описания (статус pending).")
         info = unanalyzed_info(scan_id)
     print(f"\n[5/5] Сохранение: {info.get('name', '?')}")
+    view.set_status(f"Сохранение: {info.get('name', '?')}")
     results = []
     smaller = {}
     for name, base_url, key in servers():
@@ -265,41 +263,68 @@ class KeyReader:
         if self.fd is not None:
             termios.tcflush(self.fd, termios.TCIFLUSH)
 
-    def wait(self):
-        """Returns 'r' to start a scan (SPACE or R), 'q' to quit."""
+    def poll(self):
+        """'r' (SPACE or R) or 'q' (Q, Esc, end of piped input) when such a key is waiting, else None."""
+        ready, _, _ = select.select([sys.stdin], [], [], 0)
+        if not ready:
+            return None
         if self.fd is None:  # not a terminal (piped input): one line per command
             line = sys.stdin.readline()
             return "q" if not line or line.strip().lower() == "q" else "r"
-        while True:
-            ready, _, _ = select.select([self.fd], [], [], 0.5)
-            if not ready:
-                continue
-            keys = os.read(self.fd, 16).decode("utf-8", "ignore").lower()
-            for key in keys:
-                if key in (" ", "r", "к"):  # SPACE or R (also R with the Russian keyboard layout)
-                    return "r"
-                if key in ("q", "й", "\x1b"):
-                    return "q"
+        for key in os.read(self.fd, 16).decode("utf-8", "ignore").lower():
+            if key in (" ", "r", "к"):  # SPACE or R (also R with the Russian keyboard layout)
+                return "r"
+            if key in ("q", "й", "\x1b"):
+                return "q"
+        return None
+
+
+READY = "Готово: нажмите ПРОБЕЛ для сканирования, Q - выход"
+
+
+def run_scan(table, view):
+    try:
+        scan(table, view)
+    except Exception as exc:  # one failed scan must not end the session
+        print(f"\nОшибка сканирования: {exc}")
 
 
 def main():
     with Turntable() as table:
         print(f"Поворотный стол: {table.port} ({table.hello})")
         cap = open_camera()
+        view = CameraView(cap, show=preview_wanted())
+        if view.window_open:
+            print("Окно камеры открыто: клавиши ПРОБЕЛ и Q работают и в нём.")
+        worker = None
         try:
             with KeyReader() as keys:
+                print("\nПоставьте артефакт на стол и нажмите ПРОБЕЛ (или R) для сканирования (Q - выход)...", flush=True)
+                view.set_status(READY)
                 while True:
-                    keys.drop_pending()
-                    print("\nПоставьте артефакт на стол и нажмите ПРОБЕЛ (или R) для сканирования (Q - выход)...", flush=True)
-                    if keys.wait() == "q":
+                    view.update()  # live picture; also paces this loop (one camera frame)
+                    if worker is not None:
+                        if worker.is_alive():
+                            continue  # keys pressed during a scan are dropped below
+                        worker = None
+                        keys.drop_pending()
+                        view.drop_keys()
+                        print("\nПоставьте артефакт на стол и нажмите ПРОБЕЛ (или R) для сканирования (Q - выход)...", flush=True)
+                        view.set_status(READY)
+                    key = view.poll_key() or keys.poll()
+                    if key == "q":
                         break
-                    try:
-                        scan(table, cap)
-                    except Exception as exc:  # one failed scan must not end the session
-                        print(f"\nОшибка сканирования: {exc}")
+                    if key == "r":
+                        worker = threading.Thread(target=run_scan, args=(table, view), daemon=True)
+                        worker.start()
         except KeyboardInterrupt:
             pass
         finally:
+            if worker is not None and worker.is_alive():
+                print("\nДожидаюсь конца сканирования...")
+                while worker.is_alive():
+                    view.update()
+            view.close()
             cap.release()
             try:
                 table.off()

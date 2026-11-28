@@ -33,7 +33,8 @@ class ScanPipelineTests(ServerTestCase):
         env = dict(os.environ, SUPABASE_URL=BASE, SUPABASE_KEY=PUBLISHABLE, HARNESS_ARTIFACT_NAME=name,
                    PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8",
                    # Only the Pi: a second server from archoai_app/.env (the cloud) must not get test data.
-                   SUPABASE_FALLBACK_URL="", SUPABASE_FALLBACK_KEY="", SUPABASE_SERVER="primary", **extra_env)
+                   SUPABASE_FALLBACK_URL="", SUPABASE_FALLBACK_KEY="", SUPABASE_SERVER="primary",
+                   SCAN_PREVIEW="0", **extra_env)  # no camera window on the desktop during tests
         env.pop("SUPABASE_PROJECT_REF", None)
         python = str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
         done = subprocess.run([python, str(HARNESS), str(SCRIPTS / script_name)], env=env, input=keys,
