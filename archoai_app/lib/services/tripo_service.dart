@@ -83,8 +83,8 @@ class TripoService {
 
   /// Tripo v3 quality options and their allowed values (model v3.0 or newer).
   /// Best quality: geometry_quality `detailed` (Ultra mode) and texture_quality
-  /// `detailed` (or `extreme`, 8K textures); compress `geometry` keeps the
-  /// GLB small, and model_viewer decodes it.
+  /// `detailed` (or `extreme`, 8K textures). Leave compress unset: model_viewer
+  /// cannot load meshopt-compressed (`geometry`) models.
   static const Map<String, (String, List<Object>)> qualityOptions = {
     'geometry_quality': ('TRIPO_GEOMETRY_QUALITY', ['standard', 'detailed']),
     'texture_quality': ('TRIPO_TEXTURE_QUALITY', ['fast', 'standard', 'detailed', 'extreme']),

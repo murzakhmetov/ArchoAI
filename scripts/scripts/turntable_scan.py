@@ -18,6 +18,8 @@ TRIPO_API_KEY, CAMERA_INDEX, TURNTABLE_PORT (default: the Arduino found on USB),
 SCAN_STEPS (default 6 photos per turn), SCAN_SETTLE_SECONDS (pause after each move, default 0.8).
 Hardware: Arduino Uno + CNC Shield V3 + NEMA 17 with the firmware turntable/turntable.ino.
 """
+import json
+import struct
 import os
 import select
 import sys
@@ -109,6 +111,22 @@ def servers():
     return targets
 
 
+# glTF extensions the app's 3D viewer (model_viewer_plus) cannot load: tested with its model-viewer.min.js.
+VIEWER_UNSUPPORTED_EXTENSIONS = ("EXT_meshopt_compression", "KHR_meshopt_compression")
+
+
+def viewer_unsupported_extensions(glb):
+    """Required glTF extensions of a GLB that the app cannot display (empty when it is fine)."""
+    try:
+        length, kind = struct.unpack_from("<I4s", glb, 12)
+        if kind != b"JSON":
+            return []
+        required = json.loads(glb[20:20 + length]).get("extensionsRequired") or []
+    except (struct.error, ValueError):
+        return []
+    return [name for name in required if name in VIEWER_UNSUPPORTED_EXTENSIONS]
+
+
 def make_3d_model(views):
     """Tripo multiview model from up to 4 views. Returns (glb bytes, task id) or (None, task id or None)."""
     if not pipeline.TRIPO_API_KEY:
@@ -134,6 +152,10 @@ def make_3d_model(views):
         task = client.wait_for_task(task_id, timeout=pipeline.TRIPO_WAIT_TIMEOUT_SECONDS,
                                     on_progress=pipeline.print_tripo_progress)
         glb = client.download(task.model_url)  # Tripo links are temporary: keep the file itself
+        unsupported = viewer_unsupported_extensions(glb)
+        if unsupported:
+            print(f"\n  ВНИМАНИЕ: модель использует {', '.join(unsupported)}; в мобильном приложении она не откроется. "
+                  "Уберите TRIPO_COMPRESS из archoai_app/.env.")
         print(f"\n  3D-модель готова ({len(glb) / 1e6:.1f} МБ).")
         return glb, task_id
     except TripoError as exc:

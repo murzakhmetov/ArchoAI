@@ -429,7 +429,7 @@ def _is_connect_failure(exc: BaseException) -> bool:
 # Tripo docs ("Multiview to 3D Model - H Series"). Only valid with model v3.0-20250812 or newer.
 # Highest quality: geometry_quality "detailed" (Ultra mode, +20 credits) and texture_quality
 # "detailed" (+10 credits) or "extreme" (8K textures, more credits, very large files). compress
-# "geometry" (meshopt) keeps the file small; the app's model viewer decodes it.
+# "geometry" (meshopt) makes the file small, but the app's 3D viewer cannot load such models: leave it unset.
 QUALITY_OPTIONS: Dict[str, Tuple[str, Tuple[Any, ...]]] = {
     "geometry_quality": ("TRIPO_GEOMETRY_QUALITY", ("standard", "detailed")),
     "texture_quality": ("TRIPO_TEXTURE_QUALITY", ("fast", "standard", "detailed", "extreme")),
