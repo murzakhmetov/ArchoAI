@@ -111,6 +111,9 @@ def servers():
     return targets
 
 
+# A Supabase Free-plan project refuses files over 50 MiB (the Pi accepts 200 MiB).
+CLOUD_FILE_LIMIT = 50 * 1024 * 1024
+
 # glTF extensions the app's 3D viewer (model_viewer_plus) cannot load: tested with its model-viewer.min.js.
 VIEWER_UNSUPPORTED_EXTENSIONS = ("EXT_meshopt_compression", "KHR_meshopt_compression")
 
@@ -152,6 +155,9 @@ def make_3d_model(views):
         task = client.wait_for_task(task_id, timeout=pipeline.TRIPO_WAIT_TIMEOUT_SECONDS,
                                     on_progress=pipeline.print_tripo_progress)
         glb = client.download(task.model_url)  # Tripo links are temporary: keep the file itself
+        if len(glb) > CLOUD_FILE_LIMIT:
+            print(f"  ВНИМАНИЕ: модель {len(glb) / 1e6:.1f} МБ больше 50 МБ: в облако Supabase она не поместится "
+                  "(на Raspberry Pi сохранится). Уменьшите TRIPO_FACE_LIMIT в archoai_app/.env.")
         unsupported = viewer_unsupported_extensions(glb)
         if unsupported:
             print(f"\n  ВНИМАНИЕ: модель использует {', '.join(unsupported)}; в мобильном приложении она не откроется. "
