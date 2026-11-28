@@ -37,6 +37,7 @@ import withbutton as pipeline
 from backend_select import load_server_config
 from supabase_models import clamp_crack_percentage, store_model
 from tripo_client import TripoClient, TripoError
+from glb_shrink import model_for_server
 from turntable import Turntable
 
 SCAN_STEPS = int(os.getenv("SCAN_STEPS") or 6)
@@ -111,9 +112,6 @@ def servers():
     return targets
 
 
-# A Supabase Free-plan project refuses files over 50 MiB (the Pi accepts 200 MiB).
-CLOUD_FILE_LIMIT = 50 * 1024 * 1024
-
 # glTF extensions the app's 3D viewer (model_viewer_plus) cannot load: tested with its model-viewer.min.js.
 VIEWER_UNSUPPORTED_EXTENSIONS = ("EXT_meshopt_compression", "KHR_meshopt_compression")
 
@@ -155,9 +153,6 @@ def make_3d_model(views):
         task = client.wait_for_task(task_id, timeout=pipeline.TRIPO_WAIT_TIMEOUT_SECONDS,
                                     on_progress=pipeline.print_tripo_progress)
         glb = client.download(task.model_url)  # Tripo links are temporary: keep the file itself
-        if len(glb) > CLOUD_FILE_LIMIT:
-            print(f"  ВНИМАНИЕ: модель {len(glb) / 1e6:.1f} МБ больше 50 МБ: в облако Supabase она не поместится "
-                  "(на Raspberry Pi сохранится). Уменьшите TRIPO_FACE_LIMIT в archoai_app/.env.")
         unsupported = viewer_unsupported_extensions(glb)
         if unsupported:
             print(f"\n  ВНИМАНИЕ: модель использует {', '.join(unsupported)}; в мобильном приложении она не откроется. "
@@ -230,9 +225,11 @@ def scan(table, cap):
         info = unanalyzed_info(scan_id)
     print(f"\n[5/5] Сохранение: {info.get('name', '?')}")
     results = []
+    smaller = {}
     for name, base_url, key in servers():
         try:
-            line = save_to_server(name, base_url, key, scan_id, artifact_id, analyzed, photos, glb, task_id, info)
+            model = model_for_server(name, glb, smaller)
+            line = save_to_server(name, base_url, key, scan_id, artifact_id, analyzed, photos, model, task_id, info)
             print(f"  {name}: сохранено ({line}).")
             results.append(True)
         except Exception as exc:  # the other server still gets its copy

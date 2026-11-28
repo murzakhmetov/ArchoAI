@@ -30,3 +30,5 @@ server/.replica_state.json.lock
 *.zip
 **/*.zip
 
+# Node packages of the GLB tool (installed with npm ci)
+scripts/scripts/glb_tools/node_modules/

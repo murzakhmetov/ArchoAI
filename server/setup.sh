@@ -73,6 +73,12 @@ echo "   starting the stack (the first start downloads about 2.5 GB of images)..
 sudo systemctl enable --now archoai-supabase.service >/dev/null
 systemctl is-active archoai-supabase.service archoai-api-lan.service archoai-replicate.timer | paste -sd' ' | sed 's/^/   services: /'
 
+# The scanner's GLB tool (smaller model copies for the 50 MB cloud) needs its Node packages.
+if command -v node >/dev/null 2>&1 || [ -x "$HOME/.local/bin/node" ]; then
+  (cd "$REPO/scripts/scripts/glb_tools" && PATH="$HOME/.local/bin:$PATH" npm ci --no-fund --no-audit --silent) \
+    && echo "   glb_tools: Node packages installed"
+fi
+
 echo "== 4/4 archoai_app/.env"
 LAN_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')"
 LAN_IP="${LAN_IP:-$(hostname -I | awk '{print $1}')}"

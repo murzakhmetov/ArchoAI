@@ -1,0 +1,12 @@
+{
+  "name": "archoai-glb-tools",
+  "private": true,
+  "description": "Makes a smaller copy of a Tripo GLB (mesh simplification) for servers with a file size limit.",
+  "type": "module",
+  "dependencies": {
+    "@gltf-transform/core": "^4.2.1",
+    "@gltf-transform/extensions": "^4.2.1",
+    "@gltf-transform/functions": "^4.2.1",
+    "meshoptimizer": "^0.22.0"
+  }
+}
