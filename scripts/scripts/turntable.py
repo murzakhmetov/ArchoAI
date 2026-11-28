@@ -39,7 +39,7 @@ class Turntable:
         self.serial = serial.Serial(self.port, BAUD, timeout=timeout)
         self.hello = self._read_line(wait=5.0)  # the banner printed after the reset
         if not self.hello.startswith("ARCHOAI-TURNTABLE"):
-            self.hello = self.command("PING")
+            self.hello = self.command("PING", wait=5.0)  # another firmware: fail fast
         if not self.hello.startswith("ARCHOAI-TURNTABLE"):
             raise RuntimeError(f"На {self.port} не прошивка поворотного стола (ответ: {self.hello!r}). "
                                "Прошейте её: bash turntable/flash.sh")

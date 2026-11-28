@@ -91,6 +91,11 @@ esp32() {
   fi
 }
 
+turntable_firmware() {
+  [ -x "$HOME/.local/opt/platformio-venv/bin/pio" ] || skip "PlatformIO is not installed"
+  bash "$REPO/turntable/flash.sh" build
+}
+
 echo "ArchoAI system check ($(date '+%Y-%m-%d %H:%M')), logs in $LOGS"
 step "server services and network exposure"       services
 step "camera"                                      camera
@@ -106,6 +111,7 @@ step "web UI (web-deepcrack)"                      web_ui
 step "mobile app: analyze + unit tests"            flutter_checks
 step "mobile app end to end on the Pi server"      app_e2e
 step "ESP32 firmware compiles (monitoring.cpp)"    esp32
+step "turntable firmware compiles (Arduino Uno)" turntable_firmware
 
 echo
 printf '%s\n' "${results[@]}" | sort | uniq -c -w4 | awk '{print $2": "$1}' | paste -sd' '

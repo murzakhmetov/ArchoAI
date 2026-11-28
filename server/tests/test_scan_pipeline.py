@@ -26,20 +26,22 @@ PUBLIC = f"{BASE}/storage/v1/object/public/"
 
 class ScanPipelineTests(ServerTestCase):
 
-    def run_scan(self, script_name):
+    def run_scan(self, script_name, keys=None):
         if not (SCRIPTS / "pretrained_net_G.pth").exists():
             self.skipTest("DeepCrack weights pretrained_net_G.pth are missing")
         name = f"Selftest scan {uuid.uuid4().hex[:8]}"
         env = dict(os.environ, SUPABASE_URL=BASE, SUPABASE_KEY=PUBLISHABLE, HARNESS_ARTIFACT_NAME=name,
-                   PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+                   PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8",
+                   # Only the Pi: a second server from archoai_app/.env (the cloud) must not get test data.
+                   SUPABASE_FALLBACK_URL="", SUPABASE_FALLBACK_KEY="", SUPABASE_SERVER="primary")
         env.pop("SUPABASE_PROJECT_REF", None)
         python = str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
-        done = subprocess.run([python, str(HARNESS), str(SCRIPTS / script_name)], env=env,
+        done = subprocess.run([python, str(HARNESS), str(SCRIPTS / script_name)], env=env, input=keys,
                               capture_output=True, text=True, encoding="utf-8", timeout=900)
         output = done.stdout + done.stderr
         rows = self.admin_select(f"artifacts?name=eq.{requests.utils.quote(name)}&select=*")
         for row in rows:  # clean-ups run in reverse order: artifact, model_files, then the files
-            for url in (row.get("image_path"), row.get("model_url")):
+            for url in [row.get("image_path"), row.get("model_url"), *(row.get("photo_urls") or [])]:
                 if url and url.startswith(PUBLIC):
                     bucket, path = url[len(PUBLIC):].split("/", 1)
                     self.delete_object(bucket, path)
@@ -57,7 +59,10 @@ class ScanPipelineTests(ServerTestCase):
         self.assertEqual(row["status"], "complete")
         self.assertEqual((row["type"], row["era"], row["crack_percentage"]), ("Domestic", "Iron Age", 12.5))
 
-        self.assertTrue(row["image_path"].startswith(PUBLIC + "artifact-images/artifact_analyzed_"), row["image_path"])
+        # withbutton*.py: artifact_analyzed_<time>.jpg; turntable_scan.py: scans/<scan id>/analyzed.jpg
+        self.assertTrue(row["image_path"].startswith(PUBLIC + "artifact-images/artifact_analyzed_")
+                        or (row["image_path"].startswith(PUBLIC + "artifact-images/scans/")
+                            and row["image_path"].endswith("/analyzed.jpg")), row["image_path"])
         photo = requests.get(row["image_path"], timeout=TIMEOUT)
         self.assertEqual(photo.status_code, 200)
         self.assertTrue(photo.content.startswith(b"\xff\xd8\xff"), "the stored photo is not a JPEG")
@@ -82,6 +87,22 @@ class ScanPipelineTests(ServerTestCase):
 
     def test_withbutton_manual_scan_is_stored_on_the_pi(self):
         self.check_scan(*self.run_scan("withbutton_manual.py"))
+
+    def test_turntable_scan_is_stored_on_the_pi(self):
+        # One line on stdin starts one scan (as SPACE does in a terminal), the end of input quits.
+        name, rows, output = self.run_scan("turntable_scan.py", keys="scan\n")
+        self.check_scan(name, rows, output)
+        result = output.split("HARNESS_RESULT ", 1)[1].splitlines()[0]
+        self.assertIn('"rotations": [60.0, 60.0, 60.0, 60.0, 60.0, 60.0]', result,
+                      "the table must turn 6 x 60 degrees, one full turn back to the start")
+        photos = rows[0]["photo_urls"]
+        self.assertEqual(len(photos), 6)
+        self.assertTrue(rows[0]["image_path"].endswith("/analyzed.jpg"))
+        for degrees, url in zip(range(0, 360, 60), photos):
+            self.assertTrue(url.startswith(PUBLIC + "artifact-images/scans/") and url.endswith(f"angle_{degrees:03d}.jpg"), url)
+            photo = requests.get(url, timeout=TIMEOUT)
+            self.assertEqual(photo.status_code, 200, url)
+            self.assertTrue(photo.content.startswith(b"\xff\xd8\xff"), f"{url} is not a JPEG")
 
 
 if __name__ == "__main__":

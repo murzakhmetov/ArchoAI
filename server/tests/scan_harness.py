@@ -3,7 +3,8 @@ paid APIs, against the real ArchoAI server. Used by test_scan_pipeline.py.
 
 Real: the script itself, the DeepCrack model and OpenCV, the Tripo client, the google-genai SDK,
 supabase_models and the server on the Pi (database, storage, policies).
-Fake: the camera (replays the photos in scripts/scripts/camera_test_photos), the ENTER presses,
+Fake: the camera (replays the photos in scripts/scripts/camera_test_photos), the ENTER presses, the
+turntable (turntable_scan.py: rotations are only recorded; its start key comes from stdin),
 and the Tripo and Gemini APIs (a local HTTP server). Requests to any other host are refused, so
 nothing leaves the Pi.
 
@@ -121,11 +122,47 @@ class ReplayCamera:
         self.reads += 1
         return True, cv2.imread(str(PHOTOS[((self.reads - 1) // 16) % len(PHOTOS)]))
 
+    def grab(self):  # turntable_scan.py drops buffered frames with grab()
+        return True
+
     def release(self):
         pass
 
 
 cv2.VideoCapture = ReplayCamera
+
+# turntable_scan.py: a fake turntable records every rotation instead of moving a motor.
+rotations = []
+
+
+class FakeTurntable:
+    def __init__(self, *args, **kwargs):
+        self.port, self.hello = "fake-port", "ARCHOAI-TURNTABLE 1 steps=200 (fake)"
+
+    def command(self, text, wait=0):
+        return self.hello if text == "PING" else "OK " + text
+
+    def rotate(self, degrees):
+        rotations.append(degrees)
+        return f"OK ROT {degrees:g}"
+
+    def off(self):
+        return "OK OFF"
+
+    def close(self):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        pass
+
+
+sys.path.insert(0, str(scripts_dir))
+import turntable  # noqa: E402
+
+turntable.Turntable = FakeTurntable
 
 # withbutton.py: one ENTER starts a scan. withbutton_manual.py: one ENTER plus one per photo.
 presses = {"left": 5 if "manual" in script.name else 1}
@@ -145,4 +182,5 @@ os.chdir(scripts_dir)
 sys.argv = [str(script)]
 runpy.run_path(str(script), run_name="__main__")
 server.shutdown()
-print("HARNESS_RESULT " + json.dumps({"camera_indexes": opened, "fake_api_calls": calls, "task_id": TASK_ID}))
+print("HARNESS_RESULT " + json.dumps({"camera_indexes": opened, "fake_api_calls": calls, "task_id": TASK_ID,
+                                      "rotations": rotations}))

@@ -1,4 +1,4 @@
-"""Turntable scan: press R, the NEMA 17 turns the artifact in 60 degree steps and the webcam takes a
+"""Turntable scan: press SPACE (or R), the NEMA 17 turns the artifact in 60 degree steps and the webcam takes a
 photo at every step (6 photos, one full turn). Then everything goes to the ArchoAI server on the
 Raspberry Pi AND to the Supabase cloud project (each gets its own copy, same artifact id), ready for
 the mobile app:
@@ -10,7 +10,7 @@ the mobile app:
 
     cd scripts/scripts && ./venv/bin/python turntable_scan.py
 
-Keys in the terminal: R starts a scan (the whole chain: 6 photos on the turntable, crack detection,
+Keys in the terminal: SPACE (or R) starts a scan (the whole chain: 6 photos on the turntable, crack detection,
 upload, Tripo 3D model, Gemini analysis, database), Q (or Ctrl+C) ends the script.
 Settings (archoai_app/.env or the environment): SUPABASE_URL, SUPABASE_KEY (the Pi),
 SUPABASE_FALLBACK_URL, SUPABASE_FALLBACK_KEY (the cloud; empty: the Pi only), GEMINI_API_KEY,
@@ -208,7 +208,7 @@ def scan(table, cap):
 
 class KeyReader:
     """Single key presses without ENTER. The terminal stays in that mode for the whole session (keys
-    typed early are not lost); keys pressed during a scan are dropped (an extra R starts no second scan)."""
+    typed early are not lost); keys pressed during a scan are dropped (an extra SPACE/R starts no second scan)."""
 
     def __init__(self):
         self.fd = sys.stdin.fileno() if sys.stdin.isatty() else None
@@ -229,7 +229,7 @@ class KeyReader:
             termios.tcflush(self.fd, termios.TCIFLUSH)
 
     def wait(self):
-        """Returns 'r' to start a scan, 'q' to quit."""
+        """Returns 'r' to start a scan (SPACE or R), 'q' to quit."""
         if self.fd is None:  # not a terminal (piped input): one line per command
             line = sys.stdin.readline()
             return "q" if not line or line.strip().lower() == "q" else "r"
@@ -239,7 +239,7 @@ class KeyReader:
                 continue
             keys = os.read(self.fd, 16).decode("utf-8", "ignore").lower()
             for key in keys:
-                if key in ("r", "к"):  # R, also with the Russian keyboard layout
+                if key in (" ", "r", "к"):  # SPACE or R (also R with the Russian keyboard layout)
                     return "r"
                 if key in ("q", "й", "\x1b"):
                     return "q"
@@ -253,7 +253,7 @@ def main():
             with KeyReader() as keys:
                 while True:
                     keys.drop_pending()
-                    print("\nПоставьте артефакт на стол и нажмите R для сканирования (Q - выход)...", flush=True)
+                    print("\nПоставьте артефакт на стол и нажмите ПРОБЕЛ (или R) для сканирования (Q - выход)...", flush=True)
                     if keys.wait() == "q":
                         break
                     try:

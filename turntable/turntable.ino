@@ -7,9 +7,9 @@
 //   STEPS <n>      -> sets the motor steps for one full turn of the table and saves it (EEPROM),
 //                     "OK STEPS <n>". 200 = full steps; with all three microstep jumpers under the
 //                     driver (1/16) it is 3200; with a belt or gear multiply by its ratio.
-//   SPEED <rpm>    -> cruise speed in table turns per minute (1..60, default 12), "OK SPEED <rpm>"
-//   RAMP <seconds> -> time to speed up / slow down (0.05..5, default 0.4), "OK RAMP <seconds>"
-//   PROFILE SCURVE|LINEAR -> speed eases in and out, or constant acceleration (default)
+//   SPEED <rpm>    -> cruise speed in table turns per minute (1..60, default 22), "OK SPEED <rpm>"
+//   RAMP <seconds> -> time to speed up / slow down (0.05..5, default 0.3), "OK RAMP <seconds>"
+//   PROFILE SCURVE|LINEAR -> speed eases in and out (default), or constant acceleration
 //   HOLD ON|OFF    -> keep the motor current on between moves (default OFF: silent at standstill)
 //   AXIS X|Y|Z|ALL -> which driver slot(s) of the shield move (default ALL: the motor works in any slot)
 //   OFF            -> motor current off (the table turns freely), "OK OFF"
@@ -30,9 +30,11 @@ long stepsPerTurn = 200;
 // 12 rpm with a 0.4 s constant-acceleration ramp was the quietest of everything tried, near the room
 // background (1.2 s per 60 degrees). Slower (3-6 rpm) and faster (25-30 rpm) ring louder, and the
 // S-curve is louder at every speed. Microstepping jumpers (then STEPS 3200 / 6400) make it silent.
-float rpm = 12.0;          // cruise speed (table turns per minute)
-float rampSeconds = 0.4;   // time to reach the cruise speed (and to stop)
-bool sCurve = false;       // true: speed eases in and out (S-curve), false: constant acceleration
+// Defaults measured with a microphone on this turntable (full steps, 2026-11-28): S-curve at 22 rpm with a
+// 0.3 s ramp made the least noise per 60 degree move (about 3 dB less than linear at 12 rpm).
+float rpm = 22.0;          // cruise speed (table turns per minute)
+float rampSeconds = 0.3;   // time to reach the cruise speed (and to stop)
+bool sCurve = true;        // true: speed eases in and out (S-curve), false: constant acceleration
 bool holdAfterMove = false;  // false: motor current off between moves (silent, cool)
 
 void saveSteps() {
