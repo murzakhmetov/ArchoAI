@@ -424,6 +424,51 @@ def _is_connect_failure(exc: BaseException) -> bool:
     return False
 
 
+
+# Quality options of the v3 generation endpoints (image-to-model and multiview-to-model), from the
+# Tripo docs ("Multiview to 3D Model - H Series"). Only valid with model v3.0-20250812 or newer.
+# Highest quality: geometry_quality "detailed" (Ultra mode, +20 credits) and texture_quality
+# "detailed" (+10 credits) or "extreme" (8K textures, more credits, very large files). compress
+# "geometry" (meshopt) keeps the file small; the app's model viewer decodes it.
+QUALITY_OPTIONS: Dict[str, Tuple[str, Tuple[Any, ...]]] = {
+    "geometry_quality": ("TRIPO_GEOMETRY_QUALITY", ("standard", "detailed")),
+    "texture_quality": ("TRIPO_TEXTURE_QUALITY", ("fast", "standard", "detailed", "extreme")),
+    "pbr": ("TRIPO_PBR", (True, False)),
+    "texture_alignment": ("TRIPO_TEXTURE_ALIGNMENT", ("original_image", "geometry")),
+    "compress": ("TRIPO_COMPRESS", ("geometry",)),
+}
+
+
+def _check_quality(options: Dict[str, Any]) -> Dict[str, Any]:
+    checked = {}
+    for name, value in options.items():
+        if name not in QUALITY_OPTIONS:
+            raise TripoInputError(f"unknown Tripo quality option {name!r}")
+        allowed = QUALITY_OPTIONS[name][1]
+        if value not in allowed or isinstance(value, bool) != isinstance(allowed[0], bool):
+            raise TripoInputError(f"{name} must be one of {', '.join(map(str, allowed))}")
+        checked[name] = value
+    return checked
+
+
+def quality_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Quality options set in the environment; unset or invalid ones are left out (Tripo default)."""
+    env = os.environ if env is None else env
+    options: Dict[str, Any] = {}
+    for name, (variable, allowed) in QUALITY_OPTIONS.items():
+        raw = (env.get(variable) or "").strip().lower()
+        if not raw:
+            continue
+        value: Any = raw
+        if isinstance(allowed[0], bool):
+            value = {"true": True, "1": True, "yes": True, "false": False, "0": False, "no": False}.get(raw)
+        if value in allowed and isinstance(value, bool) == isinstance(allowed[0], bool):
+            options[name] = value
+        else:
+            print(f"Предупреждение: {variable}={raw!r} не поддерживается Tripo, параметр не отправляется.")
+    return options
+
+
 class TripoClient:
     """Tripo API v3 client.  See the module docstring for the retry policy."""
 
@@ -437,6 +482,7 @@ class TripoClient:
         base_url: Optional[str] = None,
         model: Optional[str] = None,
         face_limit: Optional[int] = None,
+        quality: Optional[Dict[str, Any]] = None,
         session: Optional[Any] = None,
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
@@ -474,6 +520,7 @@ class TripoClient:
             if face_limit is None or face_limit <= 0:
                 raise TripoInputError("face_limit must be a positive integer")
         self.face_limit = face_limit
+        self.quality = _check_quality(quality or {})
 
         self._session = session if session is not None else requests.Session()
         self._sleep = sleep
@@ -491,7 +538,9 @@ class TripoClient:
         TRIPO_API_KEY is required.  TRIPO_REGION selects the host: ``global`` (default) or
         ``china`` / ``cn``; an unknown value prints a warning and means ``global``.
         TRIPO_BASE_URL (a trailing slash is ignored) overrides the region.  TRIPO_MODEL and
-        TRIPO_FACE_LIMIT are optional; an invalid face limit is ignored.  Extra keyword
+        TRIPO_FACE_LIMIT are optional; an invalid face limit is ignored.  The quality options come from
+        TRIPO_GEOMETRY_QUALITY, TRIPO_TEXTURE_QUALITY, TRIPO_PBR, TRIPO_TEXTURE_ALIGNMENT and
+        TRIPO_COMPRESS (see ``QUALITY_OPTIONS``); an invalid value is ignored with a warning.  Extra keyword
         arguments go to the constructor.
         """
         region = (os.getenv("TRIPO_REGION") or "").strip().lower()
@@ -514,6 +563,7 @@ class TripoClient:
             "base_url": base_url,
             "model": os.getenv("TRIPO_MODEL") or None,
             "face_limit": face_limit,
+            "quality": quality_from_env(),
         }
         params.update(kwargs)
         return cls(**params)
@@ -715,6 +765,7 @@ class TripoClient:
         body["model"] = self.model
         if self.face_limit is not None:
             body["face_limit"] = self.face_limit
+        body.update(self.quality)
         return body
 
     @staticmethod

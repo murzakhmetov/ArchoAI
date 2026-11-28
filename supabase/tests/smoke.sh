@@ -137,8 +137,8 @@ ok_rows   "anon can ask which batch to use" \
   "begin; set local role anon; select public.pick_model_bucket(1000) as bucket; rollback;" '"bucket": *"models-01"'
 ok_rows   "a full first batch spills over to the second" \
   "begin; update public.model_buckets set capacity_bytes = 0 where bucket_id='models-01'; select public.pick_model_bucket(24) as bucket; rollback;" '"bucket": *"models-02"'
-must_fail "a file over 50 MB is refused" \
-  "select public.pick_model_bucket(60000000);" "54000|larger than"
+must_fail "a file over the per-file limit (200 MiB on the Pi) is refused" \
+  "select public.pick_model_bucket(250000000);" "54000|larger than"
 must_fail "the project cap stops pick_model_bucket" \
   "begin; update public.app_limits set value_bigint = 1 where key='storage_total_cap_bytes'; select public.pick_model_bucket(24); rollback;" "storage_full"
 ok_rows   "a missing cap row falls back to the built-in default everywhere" \

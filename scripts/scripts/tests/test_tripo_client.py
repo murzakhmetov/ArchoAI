@@ -1873,5 +1873,51 @@ class LoopbackTests(unittest.TestCase):
         self.assertEqual(json.loads(body), {"input": "tok", "model": MODEL})
 
 
+
+class QualityOptionTests(unittest.TestCase):
+    """High-quality generation: geometry_quality / texture_quality / pbr / texture_alignment / compress."""
+
+    BEST = {"TRIPO_GEOMETRY_QUALITY": "detailed", "TRIPO_TEXTURE_QUALITY": "detailed", "TRIPO_PBR": "true",
+            "TRIPO_TEXTURE_ALIGNMENT": "original_image", "TRIPO_COMPRESS": "geometry"}
+
+    def test_best_quality_settings_reach_every_generation_body(self):
+        quality = tripo_client.quality_from_env(self.BEST)
+        client = TripoClient(KEY, quality=quality)
+        for body in (client._generation_body({"input": "tok"}),
+                     client._generation_body({"inputs": [{"front": "a"}, {"left": "b"}]})):
+            self.assertEqual(body["model"], MODEL)
+            self.assertEqual(body["geometry_quality"], "detailed")
+            self.assertEqual(body["texture_quality"], "detailed")
+            self.assertIs(body["pbr"], True)
+            self.assertEqual(body["texture_alignment"], "original_image")
+            self.assertEqual(body["compress"], "geometry")
+
+    def test_unset_options_are_not_sent(self):
+        body = TripoClient(KEY)._generation_body({"input": "tok"})
+        self.assertEqual(set(body), {"input", "model"})
+
+    def test_invalid_environment_values_are_skipped(self):
+        with mock.patch("builtins.print") as printed:
+            quality = tripo_client.quality_from_env({"TRIPO_GEOMETRY_QUALITY": "ultra", "TRIPO_PBR": "maybe",
+                                                     "TRIPO_TEXTURE_QUALITY": "EXTREME"})
+        self.assertEqual(quality, {"texture_quality": "extreme"})
+        self.assertEqual(printed.call_count, 2)
+
+    def test_false_pbr_is_sent_as_a_boolean(self):
+        self.assertEqual(tripo_client.quality_from_env({"TRIPO_PBR": "no"}), {"pbr": False})
+
+    def test_wrong_options_in_code_are_refused(self):
+        for quality in ({"geometry_quality": "ultra"}, {"pbr": "true"}, {"pbr": 1}, {"colour": "red"}):
+            with self.subTest(quality=quality):
+                with self.assertRaises(TripoInputError):
+                    TripoClient(KEY, quality=quality)
+
+    def test_from_env_reads_the_quality_settings(self):
+        with mock.patch.dict(os.environ, dict(self.BEST, TRIPO_API_KEY=KEY, TRIPO_MODEL="v3.1-20260211")):
+            client = TripoClient.from_env()
+        self.assertEqual(client.quality["geometry_quality"], "detailed")
+        self.assertEqual(client.model, "v3.1-20260211")
+
+
 if __name__ == "__main__":
     unittest.main()

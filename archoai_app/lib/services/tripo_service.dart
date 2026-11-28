@@ -40,6 +40,7 @@ class TripoService {
     String baseUrl = globalBaseUrl,
     this.model = defaultModel,
     this.faceLimit,
+    this.quality = const {},
     http.Client? client,
     this.requestTimeout = const Duration(seconds: 30),
     this.uploadTimeout = const Duration(seconds: 120),
@@ -75,8 +76,41 @@ class TripoService {
       baseUrl: env('TRIPO_BASE_URL') ?? regionBaseUrl,
       model: env('TRIPO_MODEL') ?? defaultModel,
       faceLimit: (faceLimit != null && faceLimit > 0) ? faceLimit : null,
+      quality: qualityFromEnv(env),
       client: client,
     );
+  }
+
+  /// Tripo v3 quality options and their allowed values (model v3.0 or newer).
+  /// Best quality: geometry_quality `detailed` (Ultra mode) and texture_quality
+  /// `detailed` (or `extreme`, 8K textures); compress `geometry` keeps the
+  /// GLB small, and model_viewer decodes it.
+  static const Map<String, (String, List<Object>)> qualityOptions = {
+    'geometry_quality': ('TRIPO_GEOMETRY_QUALITY', ['standard', 'detailed']),
+    'texture_quality': ('TRIPO_TEXTURE_QUALITY', ['fast', 'standard', 'detailed', 'extreme']),
+    'pbr': ('TRIPO_PBR', [true, false]),
+    'texture_alignment': ('TRIPO_TEXTURE_ALIGNMENT', ['original_image', 'geometry']),
+    'compress': ('TRIPO_COMPRESS', ['geometry']),
+  };
+
+  /// Quality options set in `.env` (TRIPO_GEOMETRY_QUALITY, ...). Unset or
+  /// unsupported values are left out, so Tripo uses its default.
+  static Map<String, Object> qualityFromEnv(String? Function(String) env) {
+    final options = <String, Object>{};
+    qualityOptions.forEach((name, spec) {
+      final (variable, allowed) = spec;
+      final raw = env(variable)?.trim().toLowerCase();
+      if (raw == null || raw.isEmpty) return;
+      final Object? value = allowed.first is bool
+          ? const {'true': true, '1': true, 'yes': true, 'false': false, '0': false, 'no': false}[raw]
+          : raw;
+      if (value != null && allowed.contains(value)) {
+        options[name] = value;
+      } else {
+        debugPrint('Tripo: $variable=$raw is not supported, not sent.');
+      }
+    });
+    return options;
   }
 
   static TripoService? _instance;
@@ -103,6 +137,9 @@ class TripoService {
 
   final String model;
   final int? faceLimit;
+
+  /// Extra generation options sent with every task (see [qualityOptions]).
+  final Map<String, Object> quality;
   final Duration requestTimeout;
   final Duration uploadTimeout;
 
@@ -186,6 +223,7 @@ class TripoService {
       'input': fileToken,
       'model': model,
       'face_limit': ?faceLimit,
+      ...quality,
     };
 
     final response = await _send(

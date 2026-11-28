@@ -432,12 +432,12 @@ class InputTests(unittest.TestCase):
         self.assertTrue(logs)
 
     def test_oversized_input_is_refused_without_any_request(self):
-        self.assertEqual(supabase_models.MAX_MODEL_BYTES, 52428800)
+        self.assertEqual(supabase_models.MAX_MODEL_BYTES, 209715200)
         session = FakeSession()
-        stored, logs = run(session, data=b"\0" * (52428800 + 1))
+        stored, logs = run(session, data=b"\0" * (209715200 + 1))
         self.assertIsNone(stored)
         self.assertEqual(session.calls, [])
-        self.assertTrue(any("52428800" in line for line in logs))
+        self.assertTrue(any("209715200" in line for line in logs))
 
     def test_the_size_limit_is_inclusive(self):
         with mock.patch.object(supabase_models, "MAX_MODEL_BYTES", 10):

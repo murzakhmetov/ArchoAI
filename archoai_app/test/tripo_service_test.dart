@@ -169,6 +169,47 @@ void main() {
     });
   });
 
+  group('quality options', () {
+    const best = {
+      'TRIPO_GEOMETRY_QUALITY': 'detailed',
+      'TRIPO_TEXTURE_QUALITY': 'detailed',
+      'TRIPO_PBR': 'true',
+      'TRIPO_TEXTURE_ALIGNMENT': 'original_image',
+      'TRIPO_COMPRESS': 'geometry',
+    };
+
+    test('best-quality settings from .env are sent with the task', () async {
+      http.Request? seen;
+      final client = MockClient((request) async {
+        seen = request;
+        return _json(_ok({'task_id': 'task-q'}));
+      });
+      final service = TripoService(
+        apiKey: 'test-key',
+        client: client,
+        quality: TripoService.qualityFromEnv((name) => best[name]),
+      );
+
+      await service.createImageToModelTaskFromToken('file_abc');
+
+      expect(jsonDecode(seen!.body), {
+        'input': 'file_abc',
+        'model': 'v3.1-20260211',
+        'geometry_quality': 'detailed',
+        'texture_quality': 'detailed',
+        'pbr': true,
+        'texture_alignment': 'original_image',
+        'compress': 'geometry',
+      });
+    });
+
+    test('unset and unsupported values are left out', () {
+      const env = {'TRIPO_GEOMETRY_QUALITY': 'ultra', 'TRIPO_PBR': 'no', 'TRIPO_TEXTURE_QUALITY': 'EXTREME'};
+      expect(TripoService.qualityFromEnv((name) => env[name]), {'pbr': false, 'texture_quality': 'extreme'});
+      expect(TripoService.qualityFromEnv((_) => null), isEmpty);
+    });
+  });
+
   group('createImageToModelTaskFromToken', () {
     test('uses the v3 endpoint with input + required model', () async {
       http.Request? seen;

@@ -103,6 +103,13 @@ The app (`archoai_app/lib/services/tripo_service.dart`) and the scripts (`script
 | `TRIPO_REGION` | `global` | `global` uses `https://openapi.tripo3d.ai/v3`, `china` uses `https://openapi.tripo3d.com/v3`. Accounts and keys belong to one region and the client never switches between them on its own. |
 | `TRIPO_BASE_URL` | unset | Full base URL override, wins over `TRIPO_REGION`. |
 | `TRIPO_FACE_LIMIT` | unset | Optional polycount cap. Smaller models are cheaper to load in the app viewer. |
+| `TRIPO_GEOMETRY_QUALITY` | unset (standard) | `detailed` = Ultra mode, up to 2 M faces, +20 credits. |
+| `TRIPO_TEXTURE_QUALITY` | unset (standard) | `detailed` (+10 credits), `extreme` (8K textures, very large files) or `fast`. |
+| `TRIPO_PBR` | unset (true) | Physically based materials. |
+| `TRIPO_TEXTURE_ALIGNMENT` | unset (`original_image`) | `original_image` keeps the textures true to the photos, `geometry` follows the shape. |
+| `TRIPO_COMPRESS` | unset | `geometry` = meshopt compression: much smaller GLB, read by the app's model viewer. |
+
+**Best quality** (set in `archoai_app/.env` on the Pi): `TRIPO_MODEL=v3.1-20260211`, `TRIPO_GEOMETRY_QUALITY=detailed`, `TRIPO_TEXTURE_QUALITY=detailed`, `TRIPO_PBR=true`, `TRIPO_TEXTURE_ALIGNMENT=original_image`, `TRIPO_COMPRESS=geometry`. The scripts and the app send these with every task. The Pi accepts model files up to 200 MiB (migration `20261128000002_pi_large_models.sql`); a Supabase Free-plan project still refuses files over 50 MiB, and such a model is then kept only on the Pi.
 
 Behaviour worth knowing:
 - Download links in a finished task are temporary. The app saves the GLB to the device as soon as the task succeeds, then copies it into the Supabase model batches and writes only the permanent public URL to `artifacts.model_url` (never the temporary Tripo link); the scripts download it immediately only when `UPLOAD_GLB_TO_SUPABASE=true`, which stores it in Supabase Storage and gives a permanent link. With `false`, or when that download fails, the temporary Tripo link is stored in the database as before and a warning is printed.
