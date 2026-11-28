@@ -19,7 +19,7 @@ void main() {
         PostgrestException(message: 'model file is larger than', code: '54000'),
       );
 
-      expect(e.message, contains('50 MB'));
+      expect(e.message, contains('upload limit'));
     });
 
     test('anything else keeps the server message', () {
@@ -56,7 +56,7 @@ void main() {
           const StorageException('Payload too large', statusCode: '413'),
           'models-01',
         ).message,
-        contains('50 MB'),
+        contains('upload limit'),
       );
       expect(
         ModelStorageException.fromStorage(
@@ -122,8 +122,8 @@ void main() {
     });
   });
 
-  test('limits match the free plan and the database', () {
-    expect(maxModelBytes, 52428800);
+  test('limits match the Pi server and the database', () {
+    expect(maxModelBytes, 209715200);
     expect(legacyModelBucket, '3d1');
   });
 }

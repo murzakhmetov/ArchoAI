@@ -268,7 +268,7 @@ class SupabaseService {
     final size = await file.length();
     if (size <= 0) throw ModelStorageException('The model file is empty.');
     if (size > maxModelBytes) {
-      throw ModelStorageException('The model is larger than the 50 MB upload limit.');
+      throw ModelStorageException('The model is larger than the ${maxModelBytes ~/ (1024 * 1024)} MB upload limit.');
     }
 
     final objectPath = '$artifactId.glb';

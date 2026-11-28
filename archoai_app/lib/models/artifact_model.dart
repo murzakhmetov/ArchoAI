@@ -5,6 +5,10 @@ class ArtifactModel {
   final String? modelUrl;
   final String? localModelPath;
 
+  /// Photos of all turntable angles (0, 60, ..., 300 degrees), in turning
+  /// order. Empty for artifacts that were not scanned on the turntable.
+  final List<String> photoUrls;
+
   /// Tripo task that is generating (or generated) this artifact's 3D model and
   /// whose result is not saved on this device yet. Kept on this device only:
   /// it is not a column of the shared `artifacts` table.
@@ -26,6 +30,7 @@ class ArtifactModel {
     required this.imagePath,
     this.modelUrl,
     this.localModelPath,
+    this.photoUrls = const [],
     this.tripoTaskId,
     required this.createdAt,
     this.status = 'pending',
@@ -44,6 +49,7 @@ class ArtifactModel {
       imagePath: json['image_path'] as String? ?? json['imagePath'] as String,
       modelUrl: json['model_url'] as String? ?? json['modelUrl'] as String?,
       localModelPath: json['local_model_path'] as String? ?? json['localModelPath'] as String?,
+      photoUrls: _stringList(json['photo_urls'] ?? json['photoUrls']),
       tripoTaskId: json['tripo_task_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String? ?? json['createdAt'] as String),
       status: json['status'] as String? ?? 'pending',
@@ -63,6 +69,7 @@ class ArtifactModel {
       'image_path': imagePath,
       'model_url': modelUrl,
       'local_model_path': localModelPath,
+      'photo_urls': photoUrls,
       'tripo_task_id': tripoTaskId,
       'created_at': createdAt.toIso8601String(),
       'status': status,
@@ -81,6 +88,7 @@ class ArtifactModel {
     String? imagePath,
     String? modelUrl,
     String? localModelPath,
+    List<String>? photoUrls,
     String? tripoTaskId,
     DateTime? createdAt,
     String? status,
@@ -100,6 +108,7 @@ class ArtifactModel {
       modelUrl: modelUrl ?? this.modelUrl,
       localModelPath:
           clearLocalModelPath ? null : (localModelPath ?? this.localModelPath),
+      photoUrls: photoUrls ?? this.photoUrls,
       tripoTaskId:
           clearTripoTaskId ? null : (tripoTaskId ?? this.tripoTaskId),
       createdAt: createdAt ?? this.createdAt,
@@ -111,5 +120,12 @@ class ArtifactModel {
       condition: condition ?? this.condition,
       crackPercentage: crackPercentage ?? this.crackPercentage,
     );
+  }
+
+  /// Only non-empty strings; anything else (null, a server without the
+  /// column, odd values) gives an empty list.
+  static List<String> _stringList(Object? value) {
+    if (value is! List) return const [];
+    return [for (final item in value) if (item is String && item.isNotEmpty) item];
   }
 }

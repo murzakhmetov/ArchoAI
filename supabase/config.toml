@@ -119,7 +119,7 @@ port = 54324
 [storage]
 enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
-file_size_limit = "50MiB"
+file_size_limit = "200MiB"  # Tripo Ultra quality models; = app_limits.model_max_file_bytes
 
 # 3D model batches. Buckets do NOT add capacity: the Free plan quota (1 GB) is shared by every bucket.
 # Order of use and per-batch capacity live in public.model_buckets (see supabase/migrations).
@@ -127,22 +127,22 @@ file_size_limit = "50MiB"
 # limits (they used to accept any file of any size from the public key); `public` is unchanged.
 [storage.buckets.models-01]
 public = true
-file_size_limit = "50MiB"
+file_size_limit = "200MiB"  # Tripo Ultra quality models; = app_limits.model_max_file_bytes
 allowed_mime_types = ["model/gltf-binary", "application/octet-stream"]
 
 [storage.buckets.models-02]
 public = true
-file_size_limit = "50MiB"
+file_size_limit = "200MiB"  # Tripo Ultra quality models; = app_limits.model_max_file_bytes
 allowed_mime_types = ["model/gltf-binary", "application/octet-stream"]
 
 [storage.buckets.models-03]
 public = true
-file_size_limit = "50MiB"
+file_size_limit = "200MiB"  # Tripo Ultra quality models; = app_limits.model_max_file_bytes
 allowed_mime_types = ["model/gltf-binary", "application/octet-stream"]
 
 [storage.buckets.models-04]
 public = true
-file_size_limit = "50MiB"
+file_size_limit = "200MiB"  # Tripo Ultra quality models; = app_limits.model_max_file_bytes
 allowed_mime_types = ["model/gltf-binary", "application/octet-stream"]
 
 [storage.buckets.artifact-images]

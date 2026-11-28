@@ -12,6 +12,7 @@ import '../../services/tripo_service.dart';
 import '../../services/local_storage_service.dart';
 import '../../services/model_storage.dart';
 import '../scanner/model_viewer_screen.dart';
+import '../../widgets/angle_gallery.dart';
 import '../../widgets/glass_card.dart';
 
 class ArtifactsScreen extends StatefulWidget {
@@ -736,6 +737,9 @@ class _ArtifactsScreenState extends State<ArtifactsScreen> {
               ),
             ),
             
+            // Turntable scans: all angle photos (0, 60, ..., 300 degrees).
+            AngleStrip(urls: artifact.photoUrls),
+
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(

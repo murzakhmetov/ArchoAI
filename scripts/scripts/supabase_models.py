@@ -4,7 +4,7 @@ The server is the Supabase stack on the Raspberry Pi (``SUPABASE_URL``, for exam
 ``http://192.168.1.61:54321``, see server/README.md); a Supabase cloud project still works with its
 URL or bare project ref.  ``resolve_supabase_url`` turns the configuration into the base URL.
 
-The project keeps models in buckets ``models-01`` .. ``models-04`` (a soft capacity each, 50 MiB per
+The project keeps models in buckets ``models-01`` .. ``models-04`` (a soft capacity each, 200 MiB per
 file, filled in order).
 The server decides which bucket gets the next file (RPC ``pick_model_bucket``), and every stored file
 is recorded for usage accounting (RPC ``register_model_file``).  Buckets do not add capacity: the
@@ -13,7 +13,7 @@ an old project that does not have the RPC at all (HTTP 404, PostgREST ``PGRST202
 It has no quota logic to bypass, so the legacy bucket ``3d1`` (``fallback_bucket``) is used there.
 
 Flow of ``store_model``:
-  1. refuse an empty file or one over 50 MiB;
+  1. refuse an empty file or one over MAX_MODEL_BYTES (200 MiB);
   2. pick the bucket: "storage full" / "too large" answers, network errors, 5xx and every other RPC
      answer end the attempt (nothing is uploaded); only a missing RPC selects the fallback bucket;
   3. upload once, into the picked bucket (or the fallback bucket when the RPC is missing); a refused
@@ -47,11 +47,13 @@ __all__ = [
     "store_model",
 ]
 
-MAX_MODEL_BYTES = 52428800  # 50 MiB: the size limit of every models-NN bucket
+# 200 MiB: the size limit of every models-NN bucket on the Pi (Tripo Ultra quality). A Supabase Free-plan
+# project still refuses files over 50 MiB itself (pick_model_bucket answers 54000), which is handled.
+MAX_MODEL_BYTES = 209715200
 
 # PostgREST error codes of pick_model_bucket
 _CODE_STORAGE_FULL = "53100"  # project cap reached or every batch is full
-_CODES_REFUSED_SIZE = ("54000", "22023")  # file larger than 50 MB / invalid size
+_CODES_REFUSED_SIZE = ("54000", "22023")  # file larger than the server's limit / invalid size
 # The RPC itself does not exist (a project without the migrations): HTTP 404 or one of these codes
 _CODES_RPC_MISSING = ("PGRST202", "42883")
 # Outcomes of the bucket pick
@@ -305,7 +307,7 @@ def store_model(
         _say(log, "[Supabase] Модель не сохранена: файл пустой.")
         return None
     if size > MAX_MODEL_BYTES:
-        _say(log, f"[Supabase] Модель не сохранена: размер {size} байт больше лимита {MAX_MODEL_BYTES} байт (50 МБ).")
+        _say(log, f"[Supabase] Модель не сохранена: размер {size} байт больше лимита {MAX_MODEL_BYTES} байт ({MAX_MODEL_BYTES // 1048576} МБ).")
         return None
     base = normalize_base_url(base_url)
     if base is None:

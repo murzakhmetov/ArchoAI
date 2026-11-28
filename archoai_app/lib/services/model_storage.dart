@@ -4,8 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// for a database that does not have the `pick_model_bucket` function yet.
 const String legacyModelBucket = '3d1';
 
-/// Free plan limit for one uploaded file.
-const int maxModelBytes = 50 * 1024 * 1024;
+/// Largest model file the app uploads: 200 MiB, the limit of the model buckets on the
+/// Raspberry Pi server (Tripo Ultra quality). A Supabase Free-plan project refuses files over
+/// 50 MiB itself; that answer (54000) is reported as "too large" below.
+const int maxModelBytes = 200 * 1024 * 1024;
 
 /// A model file that was stored in one of the Supabase model batches.
 class StoredModel {
@@ -50,7 +52,7 @@ class ModelStorageException implements Exception {
         );
       case '54000':
         return ModelStorageException(
-          'The model is larger than the 50 MB upload limit.',
+          'The model is larger than the server\'s upload limit.',
           code: e.code,
         );
       default:
@@ -75,7 +77,7 @@ class ModelStorageException implements Exception {
     }
     if (status == '413' || text.contains('too large') || text.contains('exceeded')) {
       return ModelStorageException(
-        'The model is larger than the 50 MB upload limit.',
+        'The model is larger than the server\'s upload limit.',
         code: status,
       );
     }

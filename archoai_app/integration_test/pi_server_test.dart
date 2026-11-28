@@ -143,6 +143,19 @@ void main() {
     await pumpUntil(tester, () => names.any((name) => shows(find.text(name))),
         what: 'one of the newest artifacts ($names) in the collection');
 
+    // A turntable scan shows its angle photos under the main photo.
+    final scanned = await Supabase.instance.client
+        .from('artifacts')
+        .select('name, photo_urls')
+        .order('created_at', ascending: false)
+        .limit(20);
+    final withAngles = [for (final row in scanned) if ((row['photo_urls'] as List?)?.isNotEmpty ?? false) row];
+    if (withAngles.isNotEmpty) {
+      final count = (withAngles.first['photo_urls'] as List).length;
+      await pumpUntil(tester, () => shows(find.text('Ракурсы: $count')),
+          what: 'the angle photo strip of "${withAngles.first['name']}"');
+    }
+
     await SupabaseService.instance.signOut();
     await pumpUntil(tester, () => shows(signInButton), what: 'the login screen after sign-out');
   });
